@@ -1,5 +1,5 @@
-mod commands;
 mod auth;
+mod commands;
 mod config;
 mod schema;
 
@@ -11,7 +11,7 @@ use clap::{Parser, Subcommand};
 struct Cli {
     #[arg(long, global = true)]
     token: Option<String>,
-    
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -52,7 +52,7 @@ enum RunsCommands {
 
 fn main() {
     let cli = Cli::parse();
-    
+
     if let Err(e) = run(cli) {
         eprintln!("Error: {}", e);
         std::process::exit(1);
@@ -71,26 +71,14 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Runs { action } => {
             let token = auth::resolve_token(cli.token)?;
             match action {
-                RunsCommands::List { limit } => {
-                    tokio::runtime::Runtime::new()?.block_on(async {
-                        commands::runs::list_runs(&token, limit).await
-                    })
-                }
-                RunsCommands::Get { run_id } => {
-                    tokio::runtime::Runtime::new()?.block_on(async {
-                        commands::runs::get_run(&token, run_id).await
-                    })
-                }
-                RunsCommands::Events { run_id } => {
-                    tokio::runtime::Runtime::new()?.block_on(async {
-                        commands::runs::get_events(&token, run_id).await
-                    })
-                }
-                RunsCommands::Logs { run_id } => {
-                    tokio::runtime::Runtime::new()?.block_on(async {
-                        commands::runs::get_logs(&token, run_id).await
-                    })
-                }
+                RunsCommands::List { limit } => tokio::runtime::Runtime::new()?
+                    .block_on(async { commands::runs::list_runs(&token, limit).await }),
+                RunsCommands::Get { run_id } => tokio::runtime::Runtime::new()?
+                    .block_on(async { commands::runs::get_run(&token, run_id).await }),
+                RunsCommands::Events { run_id } => tokio::runtime::Runtime::new()?
+                    .block_on(async { commands::runs::get_events(&token, run_id).await }),
+                RunsCommands::Logs { run_id } => tokio::runtime::Runtime::new()?
+                    .block_on(async { commands::runs::get_logs(&token, run_id).await }),
             }
         }
     }

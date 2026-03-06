@@ -57,7 +57,11 @@ struct RunsQueryVariables {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(schema = "dagster", graphql_type = "CloudQuery", variables = "RunsQueryVariables")]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "RunsQueryVariables"
+)]
 #[cynic(schema_module = "crate::schema::schema")]
 struct RunsQuery {
     #[arguments(cursor: $cursor, limit: $limit)]
@@ -67,25 +71,27 @@ struct RunsQuery {
 
 pub async fn list_runs(token: &str, limit: Option<i32>) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
-    
+
     let operation = RunsQuery::build(RunsQueryVariables {
         cursor: None,
         limit,
     });
-    
+
     let client = reqwest::Client::new();
     let response = client
         .post(DAGSTER_API_URL)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
-    
+
     if let Some(errors) = response.errors {
         anyhow::bail!("GraphQL errors: {:?}", errors);
     }
-    
-    let data = response.data.ok_or_else(|| anyhow::anyhow!("No data in response"))?;
-    
+
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
     match data.runs_or_error {
         RunsOrError::Runs(runs) => {
             let json = serde_json::to_string_pretty(&runs.results)?;
@@ -139,7 +145,11 @@ struct RunQueryVariables {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(schema = "dagster", graphql_type = "CloudQuery", variables = "RunQueryVariables")]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "RunQueryVariables"
+)]
 #[cynic(schema_module = "crate::schema::schema")]
 struct RunQuery {
     #[arguments(runId: $run_id)]
@@ -149,24 +159,26 @@ struct RunQuery {
 
 pub async fn get_run(token: &str, run_id: String) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
-    
-    let operation = RunQuery::build(RunQueryVariables { 
-        run_id: cynic::Id::new(run_id)
+
+    let operation = RunQuery::build(RunQueryVariables {
+        run_id: cynic::Id::new(run_id),
     });
-    
+
     let client = reqwest::Client::new();
     let response = client
         .post(DAGSTER_API_URL)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
-    
+
     if let Some(errors) = response.errors {
         anyhow::bail!("GraphQL errors: {:?}", errors);
     }
-    
-    let data = response.data.ok_or_else(|| anyhow::anyhow!("No data in response"))?;
-    
+
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
     match data.run_or_error {
         RunOrError::Run(run) => {
             let json = serde_json::to_string_pretty(&run)?;
@@ -391,7 +403,11 @@ struct RunEventsQueryVariables {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(schema = "dagster", graphql_type = "CloudQuery", variables = "RunEventsQueryVariables")]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "RunEventsQueryVariables"
+)]
 #[cynic(schema_module = "crate::schema::schema")]
 struct RunEventsQuery {
     #[arguments(runId: $run_id)]
@@ -401,24 +417,26 @@ struct RunEventsQuery {
 
 pub async fn get_events(token: &str, run_id: String) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
-    
-    let operation = RunEventsQuery::build(RunEventsQueryVariables { 
-        run_id: cynic::Id::new(run_id)
+
+    let operation = RunEventsQuery::build(RunEventsQueryVariables {
+        run_id: cynic::Id::new(run_id),
     });
-    
+
     let client = reqwest::Client::new();
     let response = client
         .post(DAGSTER_API_URL)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
-    
+
     if let Some(errors) = response.errors {
         anyhow::bail!("GraphQL errors: {:?}", errors);
     }
-    
-    let data = response.data.ok_or_else(|| anyhow::anyhow!("No data in response"))?;
-    
+
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
     match data.run_or_error {
         RunOrErrorEvents::Run(run) => {
             let json = serde_json::to_string_pretty(&run.event_connection.events)?;
@@ -444,7 +462,11 @@ struct CapturedLogs {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(schema = "dagster", graphql_type = "Run", variables = "RunLogsQueryVariables")]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "Run",
+    variables = "RunLogsQueryVariables"
+)]
 #[cynic(schema_module = "crate::schema::schema")]
 struct RunWithLogs {
     #[arguments(fileKey: $file_key)]
@@ -453,7 +475,11 @@ struct RunWithLogs {
 }
 
 #[derive(cynic::InlineFragments, Debug)]
-#[cynic(schema = "dagster", graphql_type = "RunOrError", variables = "RunLogsQueryVariables")]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "RunOrError",
+    variables = "RunLogsQueryVariables"
+)]
 #[cynic(schema_module = "crate::schema::schema")]
 enum RunOrErrorLogs {
     Run(RunWithLogs),
@@ -470,7 +496,11 @@ struct RunLogsQueryVariables {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-#[cynic(schema = "dagster", graphql_type = "CloudQuery", variables = "RunLogsQueryVariables")]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "RunLogsQueryVariables"
+)]
 #[cynic(schema_module = "crate::schema::schema")]
 struct RunLogsQuery {
     #[arguments(runId: $run_id)]
@@ -480,29 +510,33 @@ struct RunLogsQuery {
 
 pub async fn get_logs(token: &str, run_id: String) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
-    
+
     // First, fetch events to find LogsCapturedEvent
-    let events_operation = RunEventsQuery::build(RunEventsQueryVariables { 
-        run_id: cynic::Id::new(run_id.clone())
+    let events_operation = RunEventsQuery::build(RunEventsQueryVariables {
+        run_id: cynic::Id::new(run_id.clone()),
     });
-    
+
     let client = reqwest::Client::new();
     let events_response = client
         .post(DAGSTER_API_URL)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(events_operation)
         .await?;
-    
+
     if let Some(errors) = events_response.errors {
         anyhow::bail!("GraphQL errors: {:?}", errors);
     }
-    
-    let events_data = events_response.data.ok_or_else(|| anyhow::anyhow!("No data in response"))?;
-    
+
+    let events_data = events_response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
     let file_key = match events_data.run_or_error {
         RunOrErrorEvents::Run(run) => {
             // Find first LogsCapturedEvent
-            run.event_connection.events.iter()
+            run.event_connection
+                .events
+                .iter()
                 .find_map(|event| {
                     if let DagsterRunEvent::LogsCapturedEvent(log_event) = event {
                         Some(log_event.file_key.clone())
@@ -519,25 +553,27 @@ pub async fn get_logs(token: &str, run_id: String) -> Result<()> {
             anyhow::bail!("Unexpected response type from API")
         }
     };
-    
+
     // Now fetch the captured logs using the file_key
-    let logs_operation = RunLogsQuery::build(RunLogsQueryVariables { 
+    let logs_operation = RunLogsQuery::build(RunLogsQueryVariables {
         run_id: cynic::Id::new(run_id),
         file_key,
     });
-    
+
     let logs_response = client
         .post(DAGSTER_API_URL)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(logs_operation)
         .await?;
-    
+
     if let Some(errors) = logs_response.errors {
         anyhow::bail!("GraphQL errors: {:?}", errors);
     }
-    
-    let logs_data = logs_response.data.ok_or_else(|| anyhow::anyhow!("No data in response"))?;
-    
+
+    let logs_data = logs_response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
     match logs_data.run_or_error {
         RunOrErrorLogs::Run(run) => {
             let json = serde_json::to_string_pretty(&run.captured_logs)?;
