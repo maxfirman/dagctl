@@ -13,5 +13,9 @@ tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 toml = "0.8"
 
+[dev-dependencies]
+mockito = "1.5"
+tempfile = "3.13"
+
 [build-dependencies]
 cynic-codegen = "3"
