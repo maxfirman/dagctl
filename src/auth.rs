@@ -9,10 +9,10 @@ pub fn resolve_token(cli_token: Option<String>) -> Result<String> {
         return Ok(token);
     }
     
-    if let Some(config) = crate::config::load_config() {
-        if let Some(token) = config.token {
-            return Ok(token);
-        }
+    if let Some(config) = crate::config::load_config()
+        && let Some(token) = config.token
+    {
+        return Ok(token);
     }
     
     anyhow::bail!("No authentication token provided. Use --token flag, DAGSTER_API_TOKEN env var, or ~/.dagster-cli/config.toml")
