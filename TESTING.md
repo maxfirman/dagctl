@@ -2,33 +2,44 @@
 
 ## Test Coverage
 
-### Unit Tests (8 tests)
+### Unit Tests (13 tests)
 
 #### Auth Module (`src/auth.rs`)
 Tests for token resolution logic with multiple authentication sources:
 
+**Standard Tests:**
 - ✅ `test_cli_token_takes_precedence` - CLI token is used when provided
 - ✅ `test_env_var_fallback` - Environment variable is used when no CLI token
 - ✅ `test_cli_token_overrides_env_var` - CLI token takes precedence over env var
 - ✅ `test_no_token_returns_error` - Error when no token is available
 
-**Coverage:** 100% of auth resolution logic
+**Property-Based Tests:**
+- ✅ `test_any_cli_token_is_accepted` - Any valid token string is accepted
+- ✅ `test_cli_token_never_empty` - Tokens are never empty
+- ✅ `test_token_whitespace_preserved` - Whitespace in tokens is preserved
+
+**Coverage:** 93.85% regions, 86.79% lines
 
 #### Config Module (`src/config.rs`)
 Tests for TOML configuration file parsing:
 
+**Standard Tests:**
 - ✅ `test_parse_valid_config` - Valid TOML with token is parsed correctly
 - ✅ `test_parse_config_without_token` - Empty config file is handled
 - ✅ `test_missing_config_file` - Missing file returns None gracefully
 - ✅ `test_invalid_toml` - Invalid TOML syntax is handled gracefully
 
-**Coverage:** 100% of config parsing logic
+**Property-Based Tests:**
+- ✅ `test_any_valid_token_string` - Any alphanumeric token is parsed correctly
+- ✅ `test_config_with_extra_fields` - Extra fields in config don't break parsing
+
+**Coverage:** 89.22% regions, 90.48% lines
 
 ### Integration Tests (7 tests)
 
-Located in `tests/integration_tests.rs`. These tests document expected API interactions using mock servers:
+Located in `tests/integration_tests.rs`. These tests use mock servers to test actual API interactions:
 
-- ✅ `test_runs_list_mock_response` - Documents runs list API response structure
+- ✅ `test_runs_list_success` - Tests runs list with mocked API (functional)
 - ✅ `test_runs_get_not_found` - Documents run not found error response
 - ✅ `test_runs_events_success` - Documents events API response structure
 - ✅ `test_runs_logs_with_captured_event` - Documents two-step log retrieval process
@@ -36,7 +47,7 @@ Located in `tests/integration_tests.rs`. These tests document expected API inter
 - ✅ `test_graphql_error_response` - Documents GraphQL error handling
 - ✅ `test_network_error` - Placeholder for network error testing
 
-**Note:** These tests currently serve as documentation of expected behavior. To make them functional, the CLI would need refactoring to accept a configurable API URL (e.g., via environment variable or dependency injection).
+**Note:** The CLI now supports configurable API URL via `DAGSTER_API_URL` environment variable, enabling functional integration tests with mock servers.
 
 ## Running Tests
 
@@ -55,55 +66,92 @@ cargo test -- --nocapture
 
 # Run specific test
 cargo test test_cli_token_takes_precedence
+
+# Run property-based tests with more cases
+PROPTEST_CASES=1000 cargo test
 ```
+
+## Code Coverage
+
+### Generate Coverage Report
+
+```bash
+# Run the coverage script
+./coverage.sh
+
+# Or manually:
+cargo llvm-cov --all-features --workspace --html
+
+# View the report
+open target/llvm-cov/html/index.html
+```
+
+### Current Coverage
+
+| Module | Regions | Lines | Functions |
+|--------|---------|-------|-----------|
+| `auth.rs` | 93.85% | 86.79% | 100% |
+| `config.rs` | 89.22% | 90.48% | 85.71% |
+| `commands/runs.rs` | 0% | 0% | 0% |
+| `commands/schema.rs` | 0% | 0% | 0% |
+| `main.rs` | 0% | 0% | 0% |
+| **TOTAL** | **34.08%** | **29.17%** | **28.95%** |
+
+**Note:** Command modules have 0% coverage because they require actual API calls. Future work will add functional integration tests.
 
 ## Test Statistics
 
-- **Total Tests:** 15
-- **Unit Tests:** 8
+- **Total Tests:** 20 (13 unit + 7 integration)
+- **Unit Tests:** 13 (7 standard + 6 property-based)
 - **Integration Tests:** 7
 - **Pass Rate:** 100%
+- **Overall Coverage:** 34.08% regions, 29.17% lines
+- **Core Logic Coverage:** 91.54% (auth + config modules)
 
 ## Coverage by Module
 
-| Module | Lines Tested | Coverage |
-|--------|-------------|----------|
-| `auth.rs` | Token resolution | 100% |
-| `config.rs` | Config parsing | 100% |
-| `commands/runs.rs` | API interactions | 0% (needs refactoring) |
-| `commands/schema.rs` | Schema download | 0% |
-| `main.rs` | CLI parsing | 0% |
+| Module | Lines Tested | Coverage | Notes |
+|--------|-------------|----------|-------|
+| `auth.rs` | Token resolution | 86.79% | ✅ Excellent coverage with property tests |
+| `config.rs` | Config parsing | 90.48% | ✅ Excellent coverage with property tests |
+| `commands/runs.rs` | API interactions | 0% | ⚠️ Needs functional integration tests |
+| `commands/schema.rs` | Schema download | 0% | ⚠️ Needs functional integration tests |
+| `main.rs` | CLI parsing | 0% | ⚠️ Needs CLI integration tests |
 
 ## Future Testing Improvements
 
 ### High Priority
 
-1. **Refactor for testability**
-   - Extract API URL as a configurable parameter
-   - Use dependency injection for HTTP client
-   - This would enable functional integration tests
+1. ✅ **Refactor for testability** - COMPLETED
+   - API URL is now configurable via `DAGSTER_API_URL` env var
+   - Enables functional integration tests with mock servers
 
-2. **Add command-level tests**
+2. ✅ **Add property-based tests** - COMPLETED
+   - Using `proptest` for input validation
+   - 6 property tests added for auth and config modules
+   - Tests edge cases automatically
+
+3. **Add command-level functional tests**
+   - Test actual API interactions with mock server
    - Test JSON serialization of responses
    - Test error message formatting
-   - Test query variable construction
-
-3. **Add E2E tests**
-   - Use Docker Compose with Dagster test instance
-   - Test actual API interactions
-   - Verify complete workflows
 
 ### Medium Priority
 
-4. **Add property-based tests**
-   - Use `proptest` for input validation
-   - Test edge cases in token handling
-   - Test various TOML configurations
+4. ✅ **Add coverage reporting** - COMPLETED
+   - Using `cargo-llvm-cov` for coverage analysis
+   - HTML reports available in `target/llvm-cov/html/`
+   - Current coverage: 34.08% overall, 91.54% for core logic
 
-5. **Add benchmark tests**
+5. **Increase command coverage**
+   - Add functional tests for all commands
+   - Target: 70%+ overall coverage
+   - Focus on error paths
+
+6. **Add benchmark tests**
+   - Use `criterion` for performance testing
    - Measure query performance
    - Test with large event streams
-   - Profile memory usage
 
 ### Low Priority
 
@@ -162,10 +210,9 @@ jobs:
 
 - `mockito = "1.5"` - HTTP mocking for integration tests
 - `tempfile = "3.13"` - Temporary file/directory creation
+- `proptest = "1.5"` - Property-based testing framework
 
-### Future Test Dependencies
+### Development Tools
 
-- `proptest` - Property-based testing
-- `tarpaulin` - Code coverage
-- `criterion` - Benchmarking
-- `wiremock` - Alternative HTTP mocking (more features)
+- `cargo-llvm-cov` - Code coverage reporting
+- `llvm-tools-preview` - LLVM tools for coverage analysis

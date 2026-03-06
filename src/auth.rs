@@ -79,4 +79,37 @@ mod tests {
             );
         }
     }
+
+    // Property-based tests
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn test_any_cli_token_is_accepted(token in "\\PC+") {
+                let result = resolve_token(Some(token.clone()));
+                prop_assert!(result.is_ok());
+                prop_assert_eq!(result.unwrap(), token);
+            }
+
+            #[test]
+            fn test_cli_token_never_empty(token in "\\PC+") {
+                let result = resolve_token(Some(token));
+                prop_assert!(result.is_ok());
+                prop_assert!(!result.unwrap().is_empty());
+            }
+
+            #[test]
+            fn test_token_whitespace_preserved(
+                prefix in "\\PC*",
+                suffix in "\\PC*"
+            ) {
+                let token = format!("{}  {}", prefix, suffix);
+                let result = resolve_token(Some(token.clone()));
+                prop_assert!(result.is_ok());
+                prop_assert_eq!(result.unwrap(), token);
+            }
+        }
+    }
 }

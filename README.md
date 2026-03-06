@@ -55,6 +55,22 @@ Example config file:
 token = "your-api-token-here"
 ```
 
+## Configuration
+
+### API URL
+
+By default, the CLI connects to `https://troweprice.dagster.cloud/prod/graphql`. You can override this with the `DAGSTER_API_URL` environment variable:
+
+```bash
+export DAGSTER_API_URL=https://your-instance.dagster.cloud/graphql
+dagster-cli runs list
+```
+
+This is useful for:
+- Testing against different Dagster instances
+- Local development with Dagster
+- Integration testing with mock servers
+
 ## Usage
 
 ### Schema Management

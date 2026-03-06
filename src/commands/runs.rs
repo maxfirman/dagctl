@@ -3,6 +3,10 @@ use serde::Serialize;
 
 const DAGSTER_API_URL: &str = "https://troweprice.dagster.cloud/prod/graphql";
 
+fn get_api_url() -> String {
+    std::env::var("DAGSTER_API_URL").unwrap_or_else(|_| DAGSTER_API_URL.to_string())
+}
+
 #[derive(cynic::QueryFragment, Debug, Serialize)]
 #[cynic(schema = "dagster", graphql_type = "Run")]
 #[cynic(schema_module = "crate::schema::schema")]
@@ -79,7 +83,7 @@ pub async fn list_runs(token: &str, limit: Option<i32>) -> Result<()> {
 
     let client = reqwest::Client::new();
     let response = client
-        .post(DAGSTER_API_URL)
+        .post(get_api_url())
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
@@ -166,7 +170,7 @@ pub async fn get_run(token: &str, run_id: String) -> Result<()> {
 
     let client = reqwest::Client::new();
     let response = client
-        .post(DAGSTER_API_URL)
+        .post(get_api_url())
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
@@ -424,7 +428,7 @@ pub async fn get_events(token: &str, run_id: String) -> Result<()> {
 
     let client = reqwest::Client::new();
     let response = client
-        .post(DAGSTER_API_URL)
+        .post(get_api_url())
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
@@ -518,7 +522,7 @@ pub async fn get_logs(token: &str, run_id: String) -> Result<()> {
 
     let client = reqwest::Client::new();
     let events_response = client
-        .post(DAGSTER_API_URL)
+        .post(get_api_url())
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(events_operation)
         .await?;
@@ -561,7 +565,7 @@ pub async fn get_logs(token: &str, run_id: String) -> Result<()> {
     });
 
     let logs_response = client
-        .post(DAGSTER_API_URL)
+        .post(get_api_url())
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(logs_operation)
         .await?;
