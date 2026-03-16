@@ -27,8 +27,10 @@ The Dagster CLI is fully implemented and working!
 - All three methods tested and working
 
 ### Task 5 & 6: Runs Commands ✅
-- **`runs list`** - Lists all runs with optional `--limit` flag
-- **`runs get <run-id>`** - Gets specific run details including config YAML
+- **`get runs`** - Lists all runs with optional `--limit` flag
+- **`get run <run-id>`** - Gets specific run details including config YAML
+- **`events <run-id>`** - Gets all events for a run
+- **`logs <run-id>`** - Gets captured logs for a run
 - JSON output to stdout
 - Proper error handling
 - All GraphQL types correctly mapped:
@@ -41,20 +43,20 @@ The Dagster CLI is fully implemented and working!
 
 ### Runs List
 ```bash
-./target/release/dagster-cli runs list --limit 5 --token <TOKEN>
+./target/release/dagctl get runs --limit 5 --token <TOKEN>
 ```
 ✅ Returns JSON array of runs with runId, jobName, status, startTime, endTime
 
 ### Runs Get
 ```bash
-./target/release/dagster-cli runs get <RUN_ID> --token <TOKEN>
+./target/release/dagctl get run <RUN_ID> --token <TOKEN>
 ```
 ✅ Returns JSON object with run details including runConfigYaml
 
 ### Environment Variable Auth
 ```bash
 export DAGSTER_API_TOKEN=<TOKEN>
-./target/release/dagster-cli runs list
+./target/release/dagctl get runs
 ```
 ✅ Works without --token flag
 

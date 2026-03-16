@@ -3,7 +3,7 @@ use serde_json::json;
 use std::env;
 
 #[tokio::test]
-async fn test_runs_list_success() {
+async fn test_get_runs_success() {
     let mut server = Server::new_async().await;
 
     let _mock = server
@@ -49,7 +49,7 @@ async fn test_runs_list_success() {
 }
 
 #[tokio::test]
-async fn test_runs_get_not_found() {
+async fn test_get_run_not_found() {
     let mut server = Server::new_async().await;
 
     let _mock = server
@@ -74,7 +74,7 @@ async fn test_runs_get_not_found() {
 }
 
 #[tokio::test]
-async fn test_runs_events_success() {
+async fn test_events_success() {
     let mut server = Server::new_async().await;
 
     let _mock = server
@@ -110,7 +110,7 @@ async fn test_runs_events_success() {
 }
 
 #[tokio::test]
-async fn test_runs_logs_with_captured_event() {
+async fn test_logs_with_captured_event() {
     let mut server = Server::new_async().await;
 
     // First request to get events
@@ -170,7 +170,7 @@ async fn test_runs_logs_with_captured_event() {
 }
 
 #[tokio::test]
-async fn test_runs_logs_no_captured_event() {
+async fn test_logs_no_captured_event() {
     let mut server = Server::new_async().await;
 
     let _mock = server

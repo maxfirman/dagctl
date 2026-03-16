@@ -25,13 +25,22 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Display one or many resources
+    Get {
+        #[command(subcommand)]
+        resource: GetResource,
+    },
+    /// Get events for a run
+    Events {
+        run_id: String,
+    },
+    /// Get captured logs for a run
+    Logs {
+        run_id: String,
+    },
     Schema {
         #[command(subcommand)]
         action: SchemaCommands,
-    },
-    Runs {
-        #[command(subcommand)]
-        action: RunsCommands,
     },
     Debug,
     /// Manage dagctl itself
@@ -39,6 +48,19 @@ enum Commands {
     SelfCmd {
         #[command(subcommand)]
         action: SelfCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum GetResource {
+    /// List runs
+    Runs {
+        #[arg(long)]
+        limit: Option<i32>,
+    },
+    /// Show details of a specific run
+    Run {
+        run_id: String,
     },
 }
 
@@ -51,23 +73,6 @@ enum SchemaCommands {
 enum SelfCommands {
     /// Update dagctl to the latest release
     Update,
-}
-
-#[derive(Subcommand)]
-enum RunsCommands {
-    List {
-        #[arg(long)]
-        limit: Option<i32>,
-    },
-    Get {
-        run_id: String,
-    },
-    Events {
-        run_id: String,
-    },
-    Logs {
-        run_id: String,
-    },
 }
 
 fn main() {
@@ -99,16 +104,16 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                 Ok(())
             }
         },
-        Commands::Runs { action } => match action {
-            RunsCommands::List { limit } => tokio::runtime::Runtime::new()?
+        Commands::Get { resource } => match resource {
+            GetResource::Runs { limit } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::runs::list_runs(&token, &api_url, limit).await }),
-            RunsCommands::Get { run_id } => tokio::runtime::Runtime::new()?
+            GetResource::Run { run_id } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::runs::get_run(&token, &api_url, run_id).await }),
-            RunsCommands::Events { run_id } => tokio::runtime::Runtime::new()?
-                .block_on(async { commands::runs::get_events(&token, &api_url, run_id).await }),
-            RunsCommands::Logs { run_id } => tokio::runtime::Runtime::new()?
-                .block_on(async { commands::runs::get_logs(&token, &api_url, run_id).await }),
         },
+        Commands::Events { run_id } => tokio::runtime::Runtime::new()?
+            .block_on(async { commands::runs::get_events(&token, &api_url, run_id).await }),
+        Commands::Logs { run_id } => tokio::runtime::Runtime::new()?
+            .block_on(async { commands::runs::get_logs(&token, &api_url, run_id).await }),
         Commands::Debug => tokio::runtime::Runtime::new()?.block_on(async {
             commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await
         }),

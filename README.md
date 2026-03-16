@@ -63,7 +63,7 @@ By default, the CLI connects to `https://troweprice.dagster.cloud/prod/graphql`.
 
 ```bash
 export DAGSTER_API_URL=https://your-instance.dagster.cloud/graphql
-dagster-cli runs list
+dagctl get runs
 ```
 
 This is useful for:
@@ -85,38 +85,38 @@ After downloading a new schema, rebuild the project:
 cargo build --release
 ```
 
-### Runs Commands
+### Resource Commands
 
 List all runs:
 ```bash
-dagster-cli runs list
+dagctl get runs
 ```
 
 List runs with a limit:
 ```bash
-dagster-cli runs list --limit 10
+dagctl get runs --limit 10
 ```
 
 Get details for a specific run:
 ```bash
-dagster-cli runs get <RUN_ID>
+dagctl get run <RUN_ID>
 ```
 
 Get all events for a specific run:
 ```bash
-dagster-cli runs events <RUN_ID>
+dagctl events <RUN_ID>
 ```
 
 Get captured logs for a specific run:
 ```bash
-dagster-cli runs logs <RUN_ID>
+dagctl logs <RUN_ID>
 ```
 
 ### Using Environment Variable
 
 ```bash
 export DAGSTER_API_TOKEN=<YOUR_TOKEN>
-dagster-cli runs list
+dagctl get runs
 ```
 
 ### Using Config File
@@ -128,14 +128,14 @@ token = "your-api-token-here"
 
 Then run commands without the `--token` flag:
 ```bash
-dagster-cli runs list
+dagctl get runs
 ```
 
 ## Output Format
 
 All commands output JSON to stdout. Errors are printed to stderr and the CLI exits with a non-zero status code.
 
-Example output from `runs list`:
+Example output from `get runs`:
 ```json
 [
   {
