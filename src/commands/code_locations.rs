@@ -262,8 +262,7 @@ struct LibraryVersion {
 pub async fn get_code_location(token: &str, api_url: &str, name: String) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
-    let operation =
-        CodeLocationQuery::build(CodeLocationQueryVariables { name: name.clone() });
+    let operation = CodeLocationQuery::build(CodeLocationQueryVariables { name: name.clone() });
 
     let response = reqwest::Client::new()
         .post(api_url)

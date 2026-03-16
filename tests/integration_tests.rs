@@ -458,10 +458,12 @@ async fn test_get_code_location_python_error() {
 
     mock.assert_async().await;
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Failed to load code location"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to load code location")
+    );
 }
 
 #[tokio::test]
