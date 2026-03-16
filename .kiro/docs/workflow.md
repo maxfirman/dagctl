@@ -12,7 +12,11 @@ cargo install cargo-llvm-cov  # optional, for coverage
 1. Clone the repo
 2. Download the schema (requires a valid Dagster API token):
    ```bash
-   cynic introspect https://troweprice.dagster.cloud/prod/graphql \
+   dagctl schema download --token <TOKEN>
+   ```
+   Or with cynic directly:
+   ```bash
+   cynic introspect https://<ORG>.dagster.cloud/<DEPLOYMENT>/graphql \
      -H "Authorization: Bearer <TOKEN>" \
      -o schemas/dagster.graphql
    ```
@@ -27,15 +31,16 @@ The schema file must exist before `cargo build` — cynic validates types at com
 
 ```bash
 # With token flag
-./target/release/dagster-cli runs list --token <TOKEN>
+dagctl --token <TOKEN> --organization <ORG> get runs
 
-# With env var
+# With env vars
 export DAGSTER_API_TOKEN=<TOKEN>
-./target/release/dagster-cli runs list --limit 10
+export DAGSTER_ORGANIZATION=<ORG>
+export DAGSTER_DEPLOYMENT=prod
+dagctl get runs --limit 10
 
-# With config file (~/.dagster-cli/config.toml)
-# token = "your-token"
-./target/release/dagster-cli runs get <RUN_ID>
+# With config file (~/.dagctl/config.toml)
+dagctl get run <RUN_ID>
 ```
 
 ## Testing
@@ -79,21 +84,29 @@ cargo llvm-cov --all-features --workspace --html
 If the Dagster API schema changes:
 
 ```bash
-./target/release/dagster-cli schema download --token <TOKEN>
-# or
-cynic introspect https://troweprice.dagster.cloud/prod/graphql \
-  -H "Authorization: Bearer <TOKEN>" \
-  -o schemas/dagster.graphql
-
+dagctl schema download --token <TOKEN>
 cargo build --release
 ```
 
 Compile errors after schema update indicate breaking changes — update the cynic types accordingly.
+
+## Releasing
+
+Releases are automated via GitHub Actions. Push a version tag to trigger a cross-platform build and GitHub release:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The workflow builds for all supported targets (macOS, Linux, Windows) and creates a GitHub release with the binaries.
 
 ## Environment Variables
 
 | Variable | Purpose |
 |----------|---------|
 | `DAGSTER_API_TOKEN` | Auth token (fallback after `--token` flag) |
+| `DAGSTER_ORGANIZATION` | Organization name (fallback after `--organization` flag) |
+| `DAGSTER_DEPLOYMENT` | Deployment name (fallback after `--deployment` flag) |
 | `DAGSTER_API_URL` | Override the default API endpoint |
 | `PROPTEST_CASES` | Number of proptest iterations (default 256) |

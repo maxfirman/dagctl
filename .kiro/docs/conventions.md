@@ -23,13 +23,13 @@ When adding new GraphQL queries, follow the established pattern in `src/commands
 ### Command handler pattern
 
 ```rust
-pub async fn my_command(token: &str, args...) -> Result<()> {
+pub async fn my_command(token: &str, api_url: &str, args...) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     let operation = MyQuery::build(MyQueryVariables { ... });
     let client = reqwest::Client::new();
     let response = client
-        .post(get_api_url())
+        .post(api_url)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
@@ -41,7 +41,6 @@ pub async fn my_command(token: &str, args...) -> Result<()> {
     let data = response.data
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
-    // Match on the union type, serialize success to JSON, bail on errors
     match data.my_field {
         MyUnion::Success(val) => {
             println!("{}", serde_json::to_string_pretty(&val)?);
@@ -56,9 +55,12 @@ pub async fn my_command(token: &str, args...) -> Result<()> {
 ## CLI Patterns
 
 - Use clap derive macros for all CLI definitions
-- Subcommands are nested enums (`Commands` → `RunsCommands`, `SchemaCommands`)
-- Global args (like `--token`) go on the top-level `Cli` struct with `#[arg(global = true)]`
+- Top-level commands: `Get`, `Events`, `Logs`, `Schema`, `Debug`, `Completion`, `SelfCmd`
+- `Get` has nested subcommands via `GetResource` enum (`Runs`, `Run`, `CodeLocations`, `CodeLocation`)
+- Global args (`--token`, `--organization`, `--deployment`) go on the top-level `Cli` struct with `#[arg(global = true)]`
+- Auth resolution and API URL construction happen in `run()` before dispatching to handlers
 - Async commands run inside `tokio::runtime::Runtime::new()?.block_on()`
+- `Completion` and `SelfCmd::Update` are handled before auth resolution (they don't need credentials)
 
 ## Testing Patterns
 
@@ -69,12 +71,8 @@ pub async fn my_command(token: &str, args...) -> Result<()> {
 - Use `tempfile::TempDir` for file system tests
 - Env var manipulation in tests uses `unsafe { env::set_var(...) }` / `env::remove_var(...)`
 
-## API URL
-
-The default API URL `https://troweprice.dagster.cloud/prod/graphql` is overridable via `DAGSTER_API_URL` env var. The `get_api_url()` helper is defined in both `commands/runs.rs` and `commands/schema.rs`.
-
 ## Serialization
 
 - All output types derive `Serialize`
 - Enum variants that appear in JSON use `#[serde(tag = "eventType")]` for tagged representation (see `DagsterRunEvent`)
-- `RunStatus` is a cynic `Enum` (not `Serialize`) — it gets serialized through the parent struct's `Debug` or via the `Run` struct's `Serialize`
+- `RunStatus` is a cynic `Enum` (not `Serialize`) — it gets serialized through the parent struct
