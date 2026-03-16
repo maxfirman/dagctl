@@ -34,13 +34,23 @@ enum Commands {
         action: RunsCommands,
     },
     Debug,
-    /// Update dagctl to the latest release
-    Update,
+    /// Manage dagctl itself
+    #[command(name = "self")]
+    SelfCmd {
+        #[command(subcommand)]
+        action: SelfCommands,
+    },
 }
 
 #[derive(Subcommand)]
 enum SchemaCommands {
     Download,
+}
+
+#[derive(Subcommand)]
+enum SelfCommands {
+    /// Update dagctl to the latest release
+    Update,
 }
 
 #[derive(Subcommand)]
@@ -70,7 +80,10 @@ fn main() {
 }
 
 fn run(cli: Cli) -> anyhow::Result<()> {
-    if let Commands::Update = &cli.command {
+    if let Commands::SelfCmd {
+        action: SelfCommands::Update,
+    } = &cli.command
+    {
         return commands::update::run_update();
     }
 
@@ -99,6 +112,6 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Debug => tokio::runtime::Runtime::new()?.block_on(async {
             commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await
         }),
-        Commands::Update => unreachable!(),
+        Commands::SelfCmd { .. } => unreachable!(),
     }
 }
