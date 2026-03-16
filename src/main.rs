@@ -3,7 +3,7 @@ mod commands;
 mod config;
 mod schema;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "dagctl")]
@@ -43,6 +43,11 @@ enum Commands {
         action: SchemaCommands,
     },
     Debug,
+    /// Generate shell completions
+    #[command(hide = true)]
+    Completions {
+        shell: clap_complete::Shell,
+    },
     /// Manage dagctl itself
     #[command(name = "self")]
     SelfCmd {
@@ -100,6 +105,11 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         return commands::update::run_update();
     }
 
+    if let Commands::Completions { shell } = &cli.command {
+        clap_complete::generate(*shell, &mut Cli::command(), "dagctl", &mut std::io::stdout());
+        return Ok(());
+    }
+
     let token = auth::resolve_token(cli.token)?;
     let organization = auth::resolve_organization(cli.organization)?;
     let deployment = auth::resolve_deployment(cli.deployment);
@@ -130,5 +140,6 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await
         }),
         Commands::SelfCmd { .. } => unreachable!(),
+        Commands::Completions { .. } => unreachable!(),
     }
 }

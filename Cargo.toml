@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 colored = "2"
 cynic = { version = "3", features = ["http-reqwest"] }
 reqwest = { version = "0.13", features = ["json"] }
