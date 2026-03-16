@@ -34,6 +34,8 @@ enum Commands {
         action: RunsCommands,
     },
     Debug,
+    /// Update dagctl to the latest release
+    Update,
 }
 
 #[derive(Subcommand)]
@@ -68,6 +70,10 @@ fn main() {
 }
 
 fn run(cli: Cli) -> anyhow::Result<()> {
+    if let Commands::Update = &cli.command {
+        return commands::update::run_update();
+    }
+
     let token = auth::resolve_token(cli.token)?;
     let organization = auth::resolve_organization(cli.organization)?;
     let deployment = auth::resolve_deployment(cli.deployment);
@@ -93,5 +99,6 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Debug => tokio::runtime::Runtime::new()?.block_on(async {
             commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await
         }),
+        Commands::Update => unreachable!(),
     }
 }

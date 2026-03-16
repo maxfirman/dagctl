@@ -84,7 +84,7 @@ jobs:
         if: matrix.archive == 'tar.gz'
         shell: bash
         run: |
-          ARCHIVE="${BINARY_NAME}-v${{ needs.version.outputs.version }}-${{ matrix.name }}.tar.gz"
+          ARCHIVE="${BINARY_NAME}-v${{ needs.version.outputs.version }}-${{ matrix.target }}.tar.gz"
           tar czf "$ARCHIVE" -C "target/${{ matrix.target }}/release" "$BINARY_NAME"
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
@@ -92,7 +92,7 @@ jobs:
         if: matrix.archive == 'zip'
         shell: bash
         run: |
-          ARCHIVE="${BINARY_NAME}-v${{ needs.version.outputs.version }}-${{ matrix.name }}.zip"
+          ARCHIVE="${BINARY_NAME}-v${{ needs.version.outputs.version }}-${{ matrix.target }}.zip"
           7z a "$ARCHIVE" "./target/${{ matrix.target }}/release/${BINARY_NAME}.exe"
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
