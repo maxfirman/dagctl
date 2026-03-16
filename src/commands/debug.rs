@@ -14,28 +14,30 @@ pub async fn run_debug(
     deployment: Option<&str>,
     api_url: &str,
 ) -> Result<()> {
+    let w = 15;
+    let label = |s: &str| format!("{:<w$}", s).bold();
     println!(
-        "{}  {}",
-        "CLI Version:".bold(),
+        "{} {}",
+        label("CLI Version:"),
         env!("CARGO_PKG_VERSION").cyan()
     );
-    println!("{} {}", "Organization:".bold(), organization.cyan());
+    println!("{} {}", label("Organization:"), organization.cyan());
     println!(
-        "{}  {}",
-        "Deployment:".bold(),
+        "{} {}",
+        label("Deployment:"),
         deployment.unwrap_or("None").cyan()
     );
-    println!("{}     {}", "API URL:".bold(), api_url.cyan());
+    println!("{} {}", label("API URL:"), api_url.cyan());
 
     match fetch_version(token, api_url).await {
         Ok(version) => {
-            println!("{}  {}", "Connection:".bold(), "✓ Connected".green());
-            println!("{} {}", "Cloud Version:".bold(), version.cyan());
+            println!("{} {}", label("Connection:"), "✓ Connected".green());
+            println!("{} {}", label("Cloud Version:"), version.cyan());
         }
         Err(e) => {
             println!(
-                "{}  {} {}",
-                "Connection:".bold(),
+                "{} {} {}",
+                label("Connection:"),
                 "✗ Failed:".red(),
                 e.to_string().red()
             );
