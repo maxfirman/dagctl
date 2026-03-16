@@ -91,8 +91,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                 .block_on(async { commands::runs::get_logs(&token, &api_url, run_id).await }),
         },
         Commands::Debug => tokio::runtime::Runtime::new()?.block_on(async {
-            commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url)
-                .await
+            commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await
         }),
     }
 }

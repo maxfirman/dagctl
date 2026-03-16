@@ -14,34 +14,18 @@ pub async fn run_debug(
     deployment: Option<&str>,
     api_url: &str,
 ) -> Result<()> {
-    println!(
-        "{} {}",
-        "Organization:".bold(),
-        organization.cyan()
-    );
+    println!("{} {}", "Organization:".bold(), organization.cyan());
     println!(
         "{}  {}",
         "Deployment:".bold(),
         deployment.unwrap_or("None").cyan()
     );
-    println!(
-        "{}     {}",
-        "API URL:".bold(),
-        api_url.cyan()
-    );
+    println!("{}     {}", "API URL:".bold(), api_url.cyan());
 
     match fetch_version(token, api_url).await {
         Ok(version) => {
-            println!(
-                "{}  {}",
-                "Connection:".bold(),
-                "✓ Connected".green()
-            );
-            println!(
-                "{}     {}",
-                "Version:".bold(),
-                version.cyan()
-            );
+            println!("{}  {}", "Connection:".bold(), "✓ Connected".green());
+            println!("{}     {}", "Version:".bold(), version.cyan());
         }
         Err(e) => {
             println!(
