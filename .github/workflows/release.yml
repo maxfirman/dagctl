@@ -67,6 +67,7 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
           sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
           rm -f Cargo.toml.bak
+          cargo update --workspace
           echo "Set Cargo.toml version to $VERSION"
 
       - uses: dtolnay/rust-toolchain@stable
