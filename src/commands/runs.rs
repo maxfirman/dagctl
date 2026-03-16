@@ -1,12 +1,6 @@
 use anyhow::Result;
 use serde::Serialize;
 
-const DAGSTER_API_URL: &str = "https://troweprice.dagster.cloud/prod/graphql";
-
-fn get_api_url() -> String {
-    std::env::var("DAGSTER_API_URL").unwrap_or_else(|_| DAGSTER_API_URL.to_string())
-}
-
 #[derive(cynic::QueryFragment, Debug, Serialize)]
 #[cynic(schema = "dagster", graphql_type = "Run")]
 #[cynic(schema_module = "crate::schema::schema")]
@@ -73,7 +67,7 @@ struct RunsQuery {
     runs_or_error: RunsOrError,
 }
 
-pub async fn list_runs(token: &str, limit: Option<i32>) -> Result<()> {
+pub async fn list_runs(token: &str, api_url: &str, limit: Option<i32>) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     let operation = RunsQuery::build(RunsQueryVariables {
@@ -83,7 +77,7 @@ pub async fn list_runs(token: &str, limit: Option<i32>) -> Result<()> {
 
     let client = reqwest::Client::new();
     let response = client
-        .post(get_api_url())
+        .post(api_url)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
@@ -161,7 +155,7 @@ struct RunQuery {
     run_or_error: RunOrError,
 }
 
-pub async fn get_run(token: &str, run_id: String) -> Result<()> {
+pub async fn get_run(token: &str, api_url: &str, run_id: String) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     let operation = RunQuery::build(RunQueryVariables {
@@ -170,7 +164,7 @@ pub async fn get_run(token: &str, run_id: String) -> Result<()> {
 
     let client = reqwest::Client::new();
     let response = client
-        .post(get_api_url())
+        .post(api_url)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
@@ -419,7 +413,7 @@ struct RunEventsQuery {
     run_or_error: RunOrErrorEvents,
 }
 
-pub async fn get_events(token: &str, run_id: String) -> Result<()> {
+pub async fn get_events(token: &str, api_url: &str, run_id: String) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     let operation = RunEventsQuery::build(RunEventsQueryVariables {
@@ -428,7 +422,7 @@ pub async fn get_events(token: &str, run_id: String) -> Result<()> {
 
     let client = reqwest::Client::new();
     let response = client
-        .post(get_api_url())
+        .post(api_url)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(operation)
         .await?;
@@ -512,7 +506,7 @@ struct RunLogsQuery {
     run_or_error: RunOrErrorLogs,
 }
 
-pub async fn get_logs(token: &str, run_id: String) -> Result<()> {
+pub async fn get_logs(token: &str, api_url: &str, run_id: String) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     // First, fetch events to find LogsCapturedEvent
@@ -522,7 +516,7 @@ pub async fn get_logs(token: &str, run_id: String) -> Result<()> {
 
     let client = reqwest::Client::new();
     let events_response = client
-        .post(get_api_url())
+        .post(api_url)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(events_operation)
         .await?;
@@ -565,7 +559,7 @@ pub async fn get_logs(token: &str, run_id: String) -> Result<()> {
     });
 
     let logs_response = client
-        .post(get_api_url())
+        .post(api_url)
         .header("Authorization", format!("Bearer {}", token))
         .run_graphql(logs_operation)
         .await?;

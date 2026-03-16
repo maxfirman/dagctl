@@ -16,8 +16,51 @@ pub fn resolve_token(cli_token: Option<String>) -> Result<String> {
     }
 
     anyhow::bail!(
-        "No authentication token provided. Use --token flag, DAGSTER_API_TOKEN env var, or ~/.dagster-cli/config.toml"
+        "No authentication token provided. Use --token flag, DAGSTER_API_TOKEN env var, or ~/.dagctl/config.toml"
     )
+}
+
+pub fn resolve_organization(cli_organization: Option<String>) -> Result<String> {
+    if let Some(organization) = cli_organization {
+        return Ok(organization);
+    }
+
+    if let Ok(organization) = std::env::var("DAGSTER_ORGANIZATION") {
+        return Ok(organization);
+    }
+
+    if let Some(config) = crate::config::load_config()
+        && let Some(organization) = config.organization
+    {
+        return Ok(organization);
+    }
+
+    anyhow::bail!(
+        "No organization provided. Use --organization flag, DAGSTER_ORGANIZATION env var, or ~/.dagctl/config.toml"
+    )
+}
+
+pub fn resolve_deployment(cli_deployment: Option<String>) -> Option<String> {
+    if let Some(deployment) = cli_deployment {
+        return Some(deployment);
+    }
+
+    if let Ok(deployment) = std::env::var("DAGSTER_DEPLOYMENT") {
+        return Some(deployment);
+    }
+
+    if let Some(config) = crate::config::load_config() {
+        return config.deployment;
+    }
+
+    None
+}
+
+pub fn build_api_url(organization: &str, deployment: Option<&str>) -> String {
+    match deployment {
+        Some(d) => format!("https://{}.dagster.cloud/{}/graphql", organization, d),
+        None => format!("https://{}.dagster.cloud/graphql", organization),
+    }
 }
 
 #[cfg(test)]
@@ -80,6 +123,81 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_cli_organization_takes_precedence() {
+        let result = resolve_organization(Some("cli-org".to_string()));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "cli-org");
+    }
+
+    #[test]
+    fn test_organization_env_var_fallback() {
+        unsafe {
+            env::set_var("DAGSTER_ORGANIZATION", "env-org");
+        }
+        let result = resolve_organization(None);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "env-org");
+        unsafe {
+            env::remove_var("DAGSTER_ORGANIZATION");
+        }
+    }
+
+    #[test]
+    fn test_no_organization_returns_error() {
+        unsafe {
+            env::remove_var("DAGSTER_ORGANIZATION");
+        }
+        let result = resolve_organization(None);
+        if result.is_err() {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("No organization provided")
+            );
+        }
+    }
+
+    #[test]
+    fn test_cli_deployment_takes_precedence() {
+        let result = resolve_deployment(Some("cli-deploy".to_string()));
+        assert_eq!(result, Some("cli-deploy".to_string()));
+    }
+
+    #[test]
+    fn test_deployment_env_var_fallback() {
+        unsafe {
+            env::set_var("DAGSTER_DEPLOYMENT", "env-deploy");
+        }
+        let result = resolve_deployment(None);
+        assert_eq!(result, Some("env-deploy".to_string()));
+        unsafe {
+            env::remove_var("DAGSTER_DEPLOYMENT");
+        }
+    }
+
+    #[test]
+    fn test_no_deployment_returns_none() {
+        unsafe {
+            env::remove_var("DAGSTER_DEPLOYMENT");
+        }
+        // May be Some if config file exists with deployment, otherwise None
+        let _result = resolve_deployment(None);
+    }
+
+    #[test]
+    fn test_build_api_url_with_deployment() {
+        let url = build_api_url("troweprice", Some("prod"));
+        assert_eq!(url, "https://troweprice.dagster.cloud/prod/graphql");
+    }
+
+    #[test]
+    fn test_build_api_url_without_deployment() {
+        let url = build_api_url("troweprice", None);
+        assert_eq!(url, "https://troweprice.dagster.cloud/graphql");
+    }
+
     // Property-based tests
     mod proptests {
         use super::*;
@@ -109,6 +227,18 @@ mod tests {
                 let result = resolve_token(Some(token.clone()));
                 prop_assert!(result.is_ok());
                 prop_assert_eq!(result.unwrap(), token);
+            }
+
+            #[test]
+            fn test_build_api_url_always_valid(
+                organization in "[a-z][a-z0-9-]+",
+                deployment in "[a-z][a-z0-9-]+"
+            ) {
+                let url = build_api_url(&organization, Some(&deployment));
+                prop_assert!(url.starts_with("https://"));
+                prop_assert!(url.ends_with("/graphql"));
+                prop_assert!(url.contains(&organization));
+                prop_assert!(url.contains(&deployment));
             }
         }
     }
