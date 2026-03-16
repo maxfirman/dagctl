@@ -7,6 +7,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "dagctl")]
+#[command(version)]
 #[command(about = "CLI for Dagster GraphQL API")]
 struct Cli {
     #[arg(long, global = true)]
