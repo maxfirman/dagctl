@@ -62,6 +62,14 @@ enum GetResource {
     Run {
         run_id: String,
     },
+    /// List code locations
+    #[command(name = "code-locations")]
+    CodeLocations,
+    /// Show details of a specific code location
+    #[command(name = "code-location")]
+    CodeLocation {
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -109,6 +117,10 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                 .block_on(async { commands::runs::list_runs(&token, &api_url, limit).await }),
             GetResource::Run { run_id } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::runs::get_run(&token, &api_url, run_id).await }),
+            GetResource::CodeLocations => tokio::runtime::Runtime::new()?
+                .block_on(async { commands::code_locations::list_code_locations(&token, &api_url).await }),
+            GetResource::CodeLocation { name } => tokio::runtime::Runtime::new()?
+                .block_on(async { commands::code_locations::get_code_location(&token, &api_url, name).await }),
         },
         Commands::Events { run_id } => tokio::runtime::Runtime::new()?
             .block_on(async { commands::runs::get_events(&token, &api_url, run_id).await }),
