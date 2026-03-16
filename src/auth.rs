@@ -113,13 +113,8 @@ mod tests {
 
         // If a config file exists with a token, this test will pass
         // Otherwise it should fail with the expected error message
-        if result.is_err() {
-            assert!(
-                result
-                    .unwrap_err()
-                    .to_string()
-                    .contains("No authentication token provided")
-            );
+        if let Err(e) = result {
+            assert!(e.to_string().contains("No authentication token provided"));
         }
     }
 
@@ -149,13 +144,8 @@ mod tests {
             env::remove_var("DAGSTER_ORGANIZATION");
         }
         let result = resolve_organization(None);
-        if result.is_err() {
-            assert!(
-                result
-                    .unwrap_err()
-                    .to_string()
-                    .contains("No organization provided")
-            );
+        if let Err(e) = result {
+            assert!(e.to_string().contains("No organization provided"));
         }
     }
 
