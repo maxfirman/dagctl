@@ -2280,7 +2280,10 @@ pub async fn get_asset_check_executions(
         if status.is_empty() {
             collected.extend(page);
         } else {
-            collected.extend(page.into_iter().filter(|e| matches_status(&status, &e.status)));
+            collected.extend(
+                page.into_iter()
+                    .filter(|e| matches_status(&status, &e.status)),
+            );
         }
 
         if collected.len() >= desired || page_len < page_size as usize {
@@ -2321,10 +2324,20 @@ fn matches_status(
     status: &AssetCheckExecutionResolvedStatus,
 ) -> bool {
     filters.iter().any(|f| match f {
-        CheckExecutionStatusFilter::InProgress => matches!(status, AssetCheckExecutionResolvedStatus::InProgress),
-        CheckExecutionStatusFilter::Succeeded => matches!(status, AssetCheckExecutionResolvedStatus::Succeeded),
-        CheckExecutionStatusFilter::Failed => matches!(status, AssetCheckExecutionResolvedStatus::Failed),
-        CheckExecutionStatusFilter::ExecutionFailed => matches!(status, AssetCheckExecutionResolvedStatus::ExecutionFailed),
-        CheckExecutionStatusFilter::Skipped => matches!(status, AssetCheckExecutionResolvedStatus::Skipped),
+        CheckExecutionStatusFilter::InProgress => {
+            matches!(status, AssetCheckExecutionResolvedStatus::InProgress)
+        }
+        CheckExecutionStatusFilter::Succeeded => {
+            matches!(status, AssetCheckExecutionResolvedStatus::Succeeded)
+        }
+        CheckExecutionStatusFilter::Failed => {
+            matches!(status, AssetCheckExecutionResolvedStatus::Failed)
+        }
+        CheckExecutionStatusFilter::ExecutionFailed => {
+            matches!(status, AssetCheckExecutionResolvedStatus::ExecutionFailed)
+        }
+        CheckExecutionStatusFilter::Skipped => {
+            matches!(status, AssetCheckExecutionResolvedStatus::Skipped)
+        }
     })
 }

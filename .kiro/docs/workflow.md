@@ -55,6 +55,8 @@ cargo test
 
 All three must pass cleanly — no warnings, no failures.
 
+**IMPORTANT:** You MUST run `cargo fmt` before every commit. The CI pipeline enforces formatting and will fail if any files are not formatted.
+
 ## Testing
 
 ```bash

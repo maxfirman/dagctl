@@ -301,14 +301,17 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                     commands::assets::get_asset_check(&token, &api_url, key, &check, &fmt).await
                 })
             }
-            GetResource::AssetCheckExecutions { key, check, limit, status } => {
-                tokio::runtime::Runtime::new()?.block_on(async {
-                    commands::assets::get_asset_check_executions(
-                        &token, &api_url, key, &check, limit, status, &fmt,
-                    )
-                    .await
-                })
-            }
+            GetResource::AssetCheckExecutions {
+                key,
+                check,
+                limit,
+                status,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::assets::get_asset_check_executions(
+                    &token, &api_url, key, &check, limit, status, &fmt,
+                )
+                .await
+            }),
         },
         Commands::Debug => tokio::runtime::Runtime::new()?.block_on(async {
             commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await

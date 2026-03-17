@@ -261,10 +261,21 @@ mod tests {
     #[test]
     fn skill_content_has_valid_frontmatter() {
         let content = SKILL_CONTENT.trim();
-        assert!(content.starts_with("---\n"), "must start with YAML frontmatter delimiter");
-        let end = content[4..].find("\n---\n").expect("must have closing frontmatter delimiter");
+        assert!(
+            content.starts_with("---\n"),
+            "must start with YAML frontmatter delimiter"
+        );
+        let end = content[4..]
+            .find("\n---\n")
+            .expect("must have closing frontmatter delimiter");
         let frontmatter = &content[4..4 + end];
-        assert!(frontmatter.contains("name:"), "frontmatter must contain name field");
-        assert!(frontmatter.contains("description:"), "frontmatter must contain description field");
+        assert!(
+            frontmatter.contains("name:"),
+            "frontmatter must contain name field"
+        );
+        assert!(
+            frontmatter.contains("description:"),
+            "frontmatter must contain description field"
+        );
     }
 }
