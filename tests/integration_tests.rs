@@ -729,6 +729,30 @@ async fn test_get_asset_success() {
                         },
                         "owners": [
                             {"__typename": "UserAssetOwner", "email": "user@example.com"}
+                        ],
+                        "automationCondition": {
+                            "label": "eager",
+                            "expandedLabel": ["eager"]
+                        },
+                        "targetingInstigators": [
+                            {
+                                "__typename": "Sensor",
+                                "id": "s1",
+                                "jobOriginId": "j1",
+                                "name": "my_sensor",
+                                "sensorType": "ASSET",
+                                "defaultStatus": "RUNNING",
+                                "canReset": true,
+                                "hasCursorUpdatePermissions": true,
+                                "sensorState": {
+                                    "id": "ss1",
+                                    "status": "RUNNING",
+                                    "hasStartPermission": true,
+                                    "hasStopPermission": true
+                                },
+                                "minIntervalSeconds": 30,
+                                "metadata": {"assetKeys": null}
+                            }
                         ]
                     }
                 }

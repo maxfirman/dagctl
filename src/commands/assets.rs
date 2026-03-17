@@ -173,7 +173,7 @@ struct AssetNodeQuery {
 #[cynic(schema = "dagster", graphql_type = "AssetNodeOrError")]
 #[cynic(schema_module = "crate::schema::schema")]
 enum AssetNodeOrError {
-    AssetNode(AssetNodeDetail),
+    AssetNode(Box<AssetNodeDetail>),
     AssetNotFoundError(AssetNotFoundError),
     #[cynic(fallback)]
     Other,
@@ -206,6 +206,61 @@ struct AssetNodeDetail {
     depended_by_keys: Vec<AssetKey>,
     repository: AssetRepository,
     owners: Vec<AssetOwner>,
+    #[cynic(rename = "automationCondition")]
+    automation_condition: Option<AutomationCondition>,
+    #[cynic(rename = "targetingInstigators")]
+    targeting_instigators: Vec<Instigator>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AutomationCondition {
+    label: Option<String>,
+    #[cynic(rename = "expandedLabel")]
+    expanded_label: Vec<String>,
+}
+
+#[derive(cynic::InlineFragments, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "Instigator")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum Instigator {
+    Schedule(InstigatorSchedule),
+    Sensor(InstigatorSensor),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "Schedule")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct InstigatorSchedule {
+    name: String,
+    #[cynic(rename = "cronSchedule")]
+    cron_schedule: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "Sensor")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct InstigatorSensor {
+    name: String,
+    #[cynic(rename = "sensorType")]
+    sensor_type: SensorType,
+}
+
+#[derive(cynic::Enum, Clone, Copy, Debug)]
+#[cynic(schema = "dagster", graphql_type = "SensorType")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum SensorType {
+    Standard,
+    RunStatus,
+    Asset,
+    MultiAsset,
+    FreshnessPolicy,
+    AutoMaterialize,
+    Automation,
+    Unknown,
 }
 
 #[derive(cynic::InlineFragments, Debug, Serialize)]
@@ -283,6 +338,24 @@ pub async fn get_asset(
                         AssetOwner::Other => "unknown".into(),
                     })
                     .collect();
+                let mut sensors = Vec::new();
+                let mut schedules = Vec::new();
+                for i in &node.targeting_instigators {
+                    match i {
+                        Instigator::Sensor(s) => {
+                            sensors.push(format!("{} ({:?})", s.name, s.sensor_type))
+                        }
+                        Instigator::Schedule(s) => {
+                            schedules.push(format!("{} ({})", s.name, s.cron_schedule))
+                        }
+                        Instigator::Other => {}
+                    }
+                }
+                let automation = node
+                    .automation_condition
+                    .as_ref()
+                    .and_then(|ac| ac.label.clone())
+                    .unwrap_or_default();
                 output::format_asset_detail(&output::AssetDetail {
                     key: &format_asset_key(&node.asset_key.path),
                     group: &node.group_name,
@@ -294,6 +367,9 @@ pub async fn get_asset(
                     dependents: &dependents,
                     jobs: &node.job_names,
                     owners: &owners,
+                    automation_condition: &automation,
+                    sensors: &sensors,
+                    schedules: &schedules,
                 });
                 Ok(())
             }
