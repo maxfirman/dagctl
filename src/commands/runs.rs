@@ -33,6 +33,20 @@ enum RunStatus {
     Canceled,
 }
 
+#[derive(Clone, Debug, clap::ValueEnum)]
+pub enum RunStatusFilter {
+    Queued,
+    #[value(name = "not-started")]
+    NotStarted,
+    Managed,
+    Starting,
+    Started,
+    Success,
+    Failure,
+    Canceling,
+    Canceled,
+}
+
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(schema = "dagster", graphql_type = "Runs")]
 #[cynic(schema_module = "crate::schema::schema")]
@@ -54,6 +68,25 @@ enum RunsOrError {
 struct RunsQueryVariables {
     cursor: Option<String>,
     limit: Option<i32>,
+    filter: Option<RunsFilter>,
+}
+
+#[derive(cynic::InputObject, Debug)]
+#[cynic(schema = "dagster", graphql_type = "RunsFilter")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct RunsFilter {
+    statuses: Option<Vec<RunStatus>>,
+    #[cynic(rename = "pipelineName")]
+    pipeline_name: Option<String>,
+    tags: Option<Vec<ExecutionTag>>,
+}
+
+#[derive(cynic::InputObject, Debug)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct ExecutionTag {
+    key: String,
+    value: String,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -64,22 +97,84 @@ struct RunsQueryVariables {
 )]
 #[cynic(schema_module = "crate::schema::schema")]
 struct RunsQuery {
-    #[arguments(cursor: $cursor, limit: $limit)]
+    #[arguments(filter: $filter, cursor: $cursor, limit: $limit)]
     #[cynic(rename = "runsOrError")]
     runs_or_error: RunsOrError,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn list_runs(
     token: &str,
     api_url: &str,
     limit: Option<i32>,
+    status: &Option<Vec<RunStatusFilter>>,
+    job: &Option<String>,
+    launched_by: &Option<String>,
+    partition: &Option<String>,
+    tags: &Option<Vec<String>>,
     fmt: &Option<OutputFormat>,
 ) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
+    let statuses = status.as_ref().map(|s| {
+        s.iter()
+            .map(|f| match f {
+                RunStatusFilter::Queued => RunStatus::Queued,
+                RunStatusFilter::NotStarted => RunStatus::NotStarted,
+                RunStatusFilter::Managed => RunStatus::Managed,
+                RunStatusFilter::Starting => RunStatus::Starting,
+                RunStatusFilter::Started => RunStatus::Started,
+                RunStatusFilter::Success => RunStatus::Success,
+                RunStatusFilter::Failure => RunStatus::Failure,
+                RunStatusFilter::Canceling => RunStatus::Canceling,
+                RunStatusFilter::Canceled => RunStatus::Canceled,
+            })
+            .collect()
+    });
+
+    let mut tag_list: Vec<ExecutionTag> = Vec::new();
+    if let Some(user) = launched_by {
+        tag_list.push(ExecutionTag {
+            key: "dagster/user".to_string(),
+            value: user.clone(),
+        });
+    }
+    if let Some(p) = partition {
+        tag_list.push(ExecutionTag {
+            key: "dagster/partition".to_string(),
+            value: p.clone(),
+        });
+    }
+    if let Some(extra) = tags {
+        for t in extra {
+            let (k, v) = t
+                .split_once('=')
+                .ok_or_else(|| anyhow::anyhow!("Invalid tag format '{}', expected key=value", t))?;
+            tag_list.push(ExecutionTag {
+                key: k.to_string(),
+                value: v.to_string(),
+            });
+        }
+    }
+
+    let filter = if statuses.is_some() || job.is_some() || !tag_list.is_empty() {
+        Some(RunsFilter {
+            statuses,
+            pipeline_name: job.clone(),
+            tags: if tag_list.is_empty() {
+                None
+            } else {
+                Some(tag_list)
+            },
+        })
+    } else {
+        None
+    };
+
     let operation = RunsQuery::build(RunsQueryVariables {
         cursor: None,
         limit,
+        filter,
     });
 
     let client = reqwest::Client::new();

@@ -5,6 +5,7 @@ mod output;
 mod schema;
 
 use clap::{CommandFactory, Parser, Subcommand};
+use commands::runs::RunStatusFilter;
 use output::OutputFormat;
 
 #[derive(Parser)]
@@ -59,6 +60,21 @@ enum GetResource {
     Runs {
         #[arg(long)]
         limit: Option<i32>,
+        /// Filter by status (e.g. success, failure, started, queued, canceled)
+        #[arg(long, value_delimiter = ',')]
+        status: Option<Vec<RunStatusFilter>>,
+        /// Filter by job name
+        #[arg(long)]
+        job: Option<String>,
+        /// Filter by user who launched the run
+        #[arg(long)]
+        launched_by: Option<String>,
+        /// Filter by partition
+        #[arg(long)]
+        partition: Option<String>,
+        /// Filter by tag (key=value)
+        #[arg(long, value_delimiter = ',')]
+        tag: Option<Vec<String>>,
     },
     /// Show details of a specific run
     Run { run_id: String },
@@ -188,8 +204,27 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             }
         },
         Commands::Get { resource } => match resource {
-            GetResource::Runs { limit } => tokio::runtime::Runtime::new()?
-                .block_on(async { commands::runs::list_runs(&token, &api_url, limit, &fmt).await }),
+            GetResource::Runs {
+                limit,
+                status,
+                job,
+                launched_by,
+                partition,
+                tag,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::runs::list_runs(
+                    &token,
+                    &api_url,
+                    limit,
+                    &status,
+                    &job,
+                    &launched_by,
+                    &partition,
+                    &tag,
+                    &fmt,
+                )
+                .await
+            }),
             GetResource::Run { run_id } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::runs::get_run(&token, &api_url, run_id, &fmt).await }),
             GetResource::RunEvents { run_id } => tokio::runtime::Runtime::new()?.block_on(async {
