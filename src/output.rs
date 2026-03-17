@@ -264,6 +264,7 @@ pub struct AssetDetail<'a> {
     pub automation_condition: &'a str,
     pub sensors: &'a [String],
     pub schedules: &'a [String],
+    pub tags: &'a [String],
 }
 
 pub fn format_asset_detail(detail: &AssetDetail) {
@@ -296,6 +297,9 @@ pub fn format_asset_detail(detail: &AssetDetail) {
             Cell::new("Owners"),
             Cell::new(detail.owners.join("\n")),
         ]);
+    }
+    if !detail.tags.is_empty() {
+        table.add_row(vec![Cell::new("Tags"), Cell::new(detail.tags.join("\n"))]);
     }
     if !detail.jobs.is_empty() {
         table.add_row(vec![Cell::new("Jobs"), Cell::new(detail.jobs.join("\n"))]);

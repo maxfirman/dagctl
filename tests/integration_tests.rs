@@ -730,6 +730,9 @@ async fn test_get_asset_success() {
                         "owners": [
                             {"__typename": "UserAssetOwner", "email": "user@example.com"}
                         ],
+                        "tags": [
+                            {"key": "dagster/storage_kind", "value": "snowflake"}
+                        ],
                         "automationCondition": {
                             "label": "eager",
                             "expandedLabel": ["eager"]

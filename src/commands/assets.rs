@@ -206,10 +206,19 @@ struct AssetNodeDetail {
     depended_by_keys: Vec<AssetKey>,
     repository: AssetRepository,
     owners: Vec<AssetOwner>,
+    tags: Vec<DefinitionTag>,
     #[cynic(rename = "automationCondition")]
     automation_condition: Option<AutomationCondition>,
     #[cynic(rename = "targetingInstigators")]
     targeting_instigators: Vec<Instigator>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct DefinitionTag {
+    key: String,
+    value: String,
 }
 
 #[derive(cynic::QueryFragment, Debug, Serialize)]
@@ -356,6 +365,11 @@ pub async fn get_asset(
                     .as_ref()
                     .and_then(|ac| ac.label.clone())
                     .unwrap_or_default();
+                let tags: Vec<_> = node
+                    .tags
+                    .iter()
+                    .map(|t| format!("{}={}", t.key, t.value))
+                    .collect();
                 output::format_asset_detail(&output::AssetDetail {
                     key: &format_asset_key(&node.asset_key.path),
                     group: &node.group_name,
@@ -370,6 +384,7 @@ pub async fn get_asset(
                     automation_condition: &automation,
                     sensors: &sensors,
                     schedules: &schedules,
+                    tags: &tags,
                 });
                 Ok(())
             }
