@@ -211,6 +211,8 @@ struct AssetNodeDetail {
     repository: AssetRepository,
     owners: Vec<AssetOwner>,
     tags: Vec<DefinitionTag>,
+    #[cynic(rename = "metadataEntries")]
+    metadata_entries: Vec<MetadataEntryFragment>,
     #[cynic(rename = "automationCondition")]
     automation_condition: Option<AutomationCondition>,
     #[cynic(rename = "targetingInstigators")]
@@ -223,6 +225,121 @@ struct AssetNodeDetail {
 struct DefinitionTag {
     key: String,
     value: String,
+}
+
+#[derive(cynic::InlineFragments, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "MetadataEntry")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum MetadataEntryFragment {
+    TextMetadataEntry(TextMetadataEntry),
+    UrlMetadataEntry(UrlMetadataEntry),
+    PathMetadataEntry(PathMetadataEntry),
+    JsonMetadataEntry(JsonMetadataEntry),
+    IntMetadataEntry(IntMetadataEntry),
+    FloatMetadataEntry(FloatMetadataEntry),
+    BoolMetadataEntry(BoolMetadataEntry),
+    MarkdownMetadataEntry(MarkdownMetadataEntry),
+    #[cynic(fallback)]
+    Other,
+}
+
+impl MetadataEntryFragment {
+    fn label(&self) -> &str {
+        match self {
+            Self::TextMetadataEntry(e) => &e.label,
+            Self::UrlMetadataEntry(e) => &e.label,
+            Self::PathMetadataEntry(e) => &e.label,
+            Self::JsonMetadataEntry(e) => &e.label,
+            Self::IntMetadataEntry(e) => &e.label,
+            Self::FloatMetadataEntry(e) => &e.label,
+            Self::BoolMetadataEntry(e) => &e.label,
+            Self::MarkdownMetadataEntry(e) => &e.label,
+            Self::Other => "",
+        }
+    }
+
+    fn value(&self) -> String {
+        match self {
+            Self::TextMetadataEntry(e) => e.text.clone(),
+            Self::UrlMetadataEntry(e) => e.url.clone(),
+            Self::PathMetadataEntry(e) => e.path.clone(),
+            Self::JsonMetadataEntry(e) => e.json_string.clone(),
+            Self::IntMetadataEntry(e) => e.int_repr.clone(),
+            Self::FloatMetadataEntry(e) => e.float_repr.clone(),
+            Self::BoolMetadataEntry(e) => e.bool_value.map(|b| b.to_string()).unwrap_or_default(),
+            Self::MarkdownMetadataEntry(e) => e.md_str.clone(),
+            Self::Other => String::new(),
+        }
+    }
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct TextMetadataEntry {
+    label: String,
+    text: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct UrlMetadataEntry {
+    label: String,
+    url: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct PathMetadataEntry {
+    label: String,
+    path: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct JsonMetadataEntry {
+    label: String,
+    #[cynic(rename = "jsonString")]
+    json_string: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct IntMetadataEntry {
+    label: String,
+    #[cynic(rename = "intRepr")]
+    int_repr: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct FloatMetadataEntry {
+    label: String,
+    #[cynic(rename = "floatRepr")]
+    float_repr: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct BoolMetadataEntry {
+    label: String,
+    #[cynic(rename = "boolValue")]
+    bool_value: Option<bool>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct MarkdownMetadataEntry {
+    label: String,
+    #[cynic(rename = "mdStr")]
+    md_str: String,
 }
 
 #[derive(cynic::QueryFragment, Debug, Serialize)]
@@ -380,6 +497,12 @@ pub async fn get_asset(
                         }
                     })
                     .collect();
+                let metadata: Vec<_> = node
+                    .metadata_entries
+                    .iter()
+                    .filter(|m| !m.label().is_empty())
+                    .map(|m| (m.label().to_string(), m.value()))
+                    .collect();
                 output::format_asset_detail(&output::AssetDetail {
                     key: &format_asset_key(&node.asset_key.path),
                     group: &node.group_name,
@@ -397,6 +520,7 @@ pub async fn get_asset(
                     sensors: &sensors,
                     schedules: &schedules,
                     tags: &tags,
+                    metadata: &metadata,
                 });
                 Ok(())
             }

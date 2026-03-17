@@ -735,6 +735,9 @@ async fn test_get_asset_success() {
                         "tags": [
                             {"key": "dagster/storage_kind", "value": "snowflake"}
                         ],
+                        "metadataEntries": [
+                            {"__typename": "TextMetadataEntry", "label": "row_count", "text": "1000"}
+                        ],
                         "automationCondition": {
                             "label": "eager",
                             "expandedLabel": ["eager"]

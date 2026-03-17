@@ -267,6 +267,7 @@ pub struct AssetDetail<'a> {
     pub sensors: &'a [String],
     pub schedules: &'a [String],
     pub tags: &'a [String],
+    pub metadata: &'a [(String, String)],
 }
 
 pub fn format_asset_detail(detail: &AssetDetail) {
@@ -314,6 +315,20 @@ pub fn format_asset_detail(detail: &AssetDetail) {
     }
     if !detail.tags.is_empty() {
         table.add_row(vec![Cell::new("Tags"), Cell::new(detail.tags.join("\n"))]);
+    }
+    if !detail.metadata.is_empty() {
+        let lines: Vec<String> = detail
+            .metadata
+            .iter()
+            .map(|(k, v)| {
+                if v.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{k}: {v}")
+                }
+            })
+            .collect();
+        table.add_row(vec![Cell::new("Metadata"), Cell::new(lines.join("\n"))]);
     }
     if !detail.jobs.is_empty() {
         table.add_row(vec![Cell::new("Jobs"), Cell::new(detail.jobs.join("\n"))]);
