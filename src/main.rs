@@ -36,15 +36,15 @@ enum Commands {
         #[command(subcommand)]
         resource: GetResource,
     },
+    /// Manage the GraphQL schema
     Schema {
         #[command(subcommand)]
         action: SchemaCommands,
     },
+    /// Print diagnostic info (version, config, API connectivity)
     Debug,
     /// Generate shell completion
-    Completion {
-        shell: clap_complete::Shell,
-    },
+    Completion { shell: clap_complete::Shell },
     /// Manage dagctl itself
     #[command(name = "self")]
     SelfCmd {
@@ -98,6 +98,7 @@ enum GetResource {
 
 #[derive(Subcommand)]
 enum SchemaCommands {
+    /// Download the Dagster GraphQL schema
     Download,
 }
 
