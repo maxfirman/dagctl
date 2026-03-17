@@ -697,6 +697,7 @@ pub async fn get_asset_events(
                             AssetResultEventType::MaterializationEvent(m) => (
                                 m.timestamp.clone(),
                                 "Materialization".into(),
+                                "Success".into(),
                                 m.run_id.clone(),
                                 m.partition.clone().unwrap_or_default(),
                                 m.message.clone(),
@@ -704,6 +705,7 @@ pub async fn get_asset_events(
                             AssetResultEventType::ObservationEvent(o) => (
                                 o.timestamp.clone(),
                                 "Observation".into(),
+                                "Success".into(),
                                 o.run_id.clone(),
                                 o.partition.clone().unwrap_or_default(),
                                 o.message.clone(),
@@ -711,6 +713,7 @@ pub async fn get_asset_events(
                             AssetResultEventType::FailedToMaterializeEvent(f) => (
                                 f.timestamp.clone(),
                                 "FailedToMaterialize".into(),
+                                "Failure".into(),
                                 f.run_id.clone(),
                                 f.partition.clone().unwrap_or_default(),
                                 f.message.clone(),
@@ -718,6 +721,7 @@ pub async fn get_asset_events(
                             AssetResultEventType::Other => (
                                 String::new(),
                                 "Unknown".into(),
+                                String::new(),
                                 String::new(),
                                 String::new(),
                                 String::new(),

@@ -368,10 +368,12 @@ pub fn format_asset_detail(detail: &AssetDetail) {
 
 // --- get asset-events ---
 
-pub fn format_asset_events_table(events: &[(String, String, String, String, String)]) {
+pub fn format_asset_events_table(events: &[(String, String, String, String, String, String)]) {
     let mut table = new_table();
-    table.set_header(vec!["TIMESTAMP", "TYPE", "RUN ID", "PARTITION", "MESSAGE"]);
-    for (ts, event_type, run_id, partition, message) in events {
+    table.set_header(vec![
+        "TIMESTAMP", "TYPE", "STATUS", "RUN ID", "PARTITION", "MESSAGE",
+    ]);
+    for (ts, event_type, status, run_id, partition, message) in events {
         let msg = if message.len() > 80 {
             format!("{}…", &message[..79])
         } else {
@@ -380,6 +382,7 @@ pub fn format_asset_events_table(events: &[(String, String, String, String, Stri
         table.add_row(vec![
             Cell::new(ts),
             Cell::new(event_type),
+            Cell::new(status).fg(status_color(status)),
             Cell::new(run_id),
             Cell::new(partition),
             Cell::new(msg),
