@@ -135,7 +135,7 @@ pub async fn list_runs(
     let mut tag_list: Vec<ExecutionTag> = Vec::new();
     if let Some(user) = launched_by {
         tag_list.push(ExecutionTag {
-            key: "dagster/user".to_string(),
+            key: "user".to_string(),
             value: user.clone(),
         });
     }
