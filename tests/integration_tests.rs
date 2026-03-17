@@ -770,8 +770,11 @@ async fn test_get_asset_success() {
                         "assetHealth": {
                             "assetHealth": "HEALTHY",
                             "materializationStatus": "HEALTHY",
+                            "materializationStatusMetadata": null,
                             "assetChecksStatus": "NOT_APPLICABLE",
-                            "freshnessStatus": "NOT_APPLICABLE"
+                            "assetChecksStatusMetadata": null,
+                            "freshnessStatus": "NOT_APPLICABLE",
+                            "freshnessStatusMetadata": null
                         }
                     }
                 }

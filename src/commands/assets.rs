@@ -227,10 +227,114 @@ struct AssetHealth {
     asset_health: AssetHealthStatus,
     #[cynic(rename = "materializationStatus")]
     materialization_status: AssetHealthStatus,
+    #[cynic(rename = "materializationStatusMetadata")]
+    materialization_status_metadata: Option<AssetHealthMaterializationMeta>,
     #[cynic(rename = "assetChecksStatus")]
     asset_checks_status: AssetHealthStatus,
+    #[cynic(rename = "assetChecksStatusMetadata")]
+    asset_checks_status_metadata: Option<AssetHealthCheckMeta>,
     #[cynic(rename = "freshnessStatus")]
     freshness_status: AssetHealthStatus,
+    #[cynic(rename = "freshnessStatusMetadata")]
+    freshness_status_metadata: Option<AssetHealthFreshnessMeta>,
+}
+
+#[derive(cynic::InlineFragments, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetHealthMaterializationMeta")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetHealthMaterializationMeta {
+    AssetHealthMaterializationDegradedPartitionedMeta(
+        AssetHealthMaterializationDegradedPartitionedMeta,
+    ),
+    AssetHealthMaterializationHealthyPartitionedMeta(
+        AssetHealthMaterializationHealthyPartitionedMeta,
+    ),
+    AssetHealthMaterializationDegradedNotPartitionedMeta(
+        AssetHealthMaterializationDegradedNotPartitionedMeta,
+    ),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetHealthMaterializationDegradedPartitionedMeta {
+    #[cynic(rename = "numFailedPartitions")]
+    num_failed_partitions: i32,
+    #[cynic(rename = "numMissingPartitions")]
+    num_missing_partitions: i32,
+    #[cynic(rename = "totalNumPartitions")]
+    total_num_partitions: i32,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetHealthMaterializationHealthyPartitionedMeta {
+    #[cynic(rename = "numMissingPartitions")]
+    num_missing_partitions: i32,
+    #[cynic(rename = "totalNumPartitions")]
+    total_num_partitions: i32,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetHealthMaterializationDegradedNotPartitionedMeta {
+    #[cynic(rename = "failedRunId")]
+    failed_run_id: Option<String>,
+}
+
+#[derive(cynic::InlineFragments, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetHealthCheckMeta")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetHealthCheckMeta {
+    AssetHealthCheckDegradedMeta(AssetHealthCheckDegradedMeta),
+    AssetHealthCheckWarningMeta(AssetHealthCheckWarningMeta),
+    AssetHealthCheckUnknownMeta(AssetHealthCheckUnknownMeta),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetHealthCheckDegradedMeta {
+    #[cynic(rename = "numFailedChecks")]
+    num_failed_checks: i32,
+    #[cynic(rename = "numWarningChecks")]
+    num_warning_checks: i32,
+    #[cynic(rename = "totalNumChecks")]
+    total_num_checks: i32,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetHealthCheckWarningMeta {
+    #[cynic(rename = "numWarningChecks")]
+    num_warning_checks: i32,
+    #[cynic(rename = "totalNumChecks")]
+    total_num_checks: i32,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetHealthCheckUnknownMeta {
+    #[cynic(rename = "numNotExecutedChecks")]
+    num_not_executed_checks: i32,
+    #[cynic(rename = "totalNumChecks")]
+    total_num_checks: i32,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetHealthFreshnessMeta {
+    #[cynic(rename = "lastMaterializedTimestamp")]
+    last_materialized_timestamp: Option<f64>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Serialize)]
@@ -493,109 +597,185 @@ pub async fn get_asset(
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
     match data.asset_node_or_error {
-        AssetNodeOrError::AssetNode(node) => match fmt {
-            Some(f) => output::render(&node, f),
-            None => {
-                let health = match data.asset_or_error_health {
-                    AssetOrErrorHealth::Asset(a) => a.asset_health,
-                    AssetOrErrorHealth::Other => None,
-                };
-                let deps: Vec<_> = node
-                    .dependency_keys
-                    .iter()
-                    .map(|k| format_asset_key(&k.path))
-                    .collect();
-                let dependents: Vec<_> = node
-                    .depended_by_keys
-                    .iter()
-                    .map(|k| format_asset_key(&k.path))
-                    .collect();
-                let owners: Vec<_> = node
-                    .owners
-                    .iter()
-                    .map(|o| match o {
-                        AssetOwner::UserAssetOwner(u) => u.email.clone(),
-                        AssetOwner::TeamAssetOwner(t) => format!("team:{}", t.team),
-                        AssetOwner::Other => "unknown".into(),
-                    })
-                    .collect();
-                let mut sensors = Vec::new();
-                let mut schedules = Vec::new();
-                for i in &node.targeting_instigators {
-                    match i {
-                        Instigator::Sensor(s) => {
-                            sensors.push(format!("{} ({:?})", s.name, s.sensor_type))
-                        }
-                        Instigator::Schedule(s) => {
-                            schedules.push(format!("{} ({})", s.name, s.cron_schedule))
-                        }
-                        Instigator::Other => {}
+        AssetNodeOrError::AssetNode(node) => {
+            let health = match data.asset_or_error_health {
+                AssetOrErrorHealth::Asset(a) => a.asset_health,
+                AssetOrErrorHealth::Other => None,
+            };
+            match fmt {
+                Some(f) => {
+                    #[derive(Serialize)]
+                    struct AssetWithHealth<'a> {
+                        #[serde(flatten)]
+                        node: &'a AssetNodeDetail,
+                        health: &'a Option<AssetHealth>,
                     }
+                    output::render(
+                        &AssetWithHealth {
+                            node: &node,
+                            health: &health,
+                        },
+                        f,
+                    )
                 }
-                let automation = node
-                    .automation_condition
+                None => {
+                    let deps: Vec<_> = node
+                        .dependency_keys
+                        .iter()
+                        .map(|k| format_asset_key(&k.path))
+                        .collect();
+                    let dependents: Vec<_> = node
+                        .depended_by_keys
+                        .iter()
+                        .map(|k| format_asset_key(&k.path))
+                        .collect();
+                    let owners: Vec<_> = node
+                        .owners
+                        .iter()
+                        .map(|o| match o {
+                            AssetOwner::UserAssetOwner(u) => u.email.clone(),
+                            AssetOwner::TeamAssetOwner(t) => format!("team:{}", t.team),
+                            AssetOwner::Other => "unknown".into(),
+                        })
+                        .collect();
+                    let mut sensors = Vec::new();
+                    let mut schedules = Vec::new();
+                    for i in &node.targeting_instigators {
+                        match i {
+                            Instigator::Sensor(s) => {
+                                sensors.push(format!("{} ({:?})", s.name, s.sensor_type))
+                            }
+                            Instigator::Schedule(s) => {
+                                schedules.push(format!("{} ({})", s.name, s.cron_schedule))
+                            }
+                            Instigator::Other => {}
+                        }
+                    }
+                    let automation = node
+                        .automation_condition
+                        .as_ref()
+                        .and_then(|ac| ac.label.clone())
+                        .unwrap_or_default();
+                    let tags: Vec<_> = node
+                        .tags
+                        .iter()
+                        .map(|t| {
+                            if t.value.is_empty() {
+                                t.key.clone()
+                            } else {
+                                format!("{}={}", t.key, t.value)
+                            }
+                        })
+                        .collect();
+                    let metadata: Vec<_> = node
+                        .metadata_entries
+                        .iter()
+                        .filter(|m| !m.label().is_empty())
+                        .map(|m| (m.label().to_string(), m.value()))
+                        .collect();
+                    let health_overall = health
+                        .as_ref()
+                        .map(|h| format!("{:?}", h.asset_health))
+                        .unwrap_or_default();
+                    let health_mat = health
                     .as_ref()
-                    .and_then(|ac| ac.label.clone())
-                    .unwrap_or_default();
-                let tags: Vec<_> = node
-                    .tags
-                    .iter()
-                    .map(|t| {
-                        if t.value.is_empty() {
-                            t.key.clone()
-                        } else {
-                            format!("{}={}", t.key, t.value)
+                    .map(|h| {
+                        let status = format!("{:?}", h.materialization_status);
+                        match &h.materialization_status_metadata {
+                            Some(AssetHealthMaterializationMeta::AssetHealthMaterializationDegradedPartitionedMeta(m)) => {
+                                format!("{status} (failed in {}/{} partitions, {} missing)",
+                                    m.num_failed_partitions, m.total_num_partitions, m.num_missing_partitions)
+                            }
+                            Some(AssetHealthMaterializationMeta::AssetHealthMaterializationHealthyPartitionedMeta(m)) => {
+                                if m.num_missing_partitions > 0 {
+                                    format!("{status} ({} missing of {} partitions)",
+                                        m.num_missing_partitions, m.total_num_partitions)
+                                } else {
+                                    format!("{status} ({} partitions)", m.total_num_partitions)
+                                }
+                            }
+                            Some(AssetHealthMaterializationMeta::AssetHealthMaterializationDegradedNotPartitionedMeta(m)) => {
+                                match &m.failed_run_id {
+                                    Some(id) => format!("{status} (failed run: {id})"),
+                                    None => status,
+                                }
+                            }
+                            _ => status,
                         }
                     })
-                    .collect();
-                let metadata: Vec<_> = node
-                    .metadata_entries
-                    .iter()
-                    .filter(|m| !m.label().is_empty())
-                    .map(|m| (m.label().to_string(), m.value()))
-                    .collect();
-                let health_overall = health
-                    .as_ref()
-                    .map(|h| format!("{:?}", h.asset_health))
                     .unwrap_or_default();
-                let health_mat = health
-                    .as_ref()
-                    .map(|h| format!("{:?}", h.materialization_status))
-                    .unwrap_or_default();
-                let health_checks = health
-                    .as_ref()
-                    .map(|h| format!("{:?}", h.asset_checks_status))
-                    .unwrap_or_default();
-                let health_freshness = health
-                    .as_ref()
-                    .map(|h| format!("{:?}", h.freshness_status))
-                    .unwrap_or_default();
-                output::format_asset_detail(&output::AssetDetail {
-                    key: &format_asset_key(&node.asset_key.path),
-                    group: &node.group_name,
-                    code_location: &node.repository.location.name,
-                    description: node.description.as_deref().unwrap_or(""),
-                    kinds: &node.kinds,
-                    partitioned: node.is_partitioned,
-                    computed_by: node.op_name.as_deref().unwrap_or(""),
-                    code_version: node.op_version.as_deref().unwrap_or(""),
-                    dependencies: &deps,
-                    dependents: &dependents,
-                    jobs: &node.job_names,
-                    owners: &owners,
-                    automation_condition: &automation,
-                    sensors: &sensors,
-                    schedules: &schedules,
-                    tags: &tags,
-                    metadata: &metadata,
-                    health: &health_overall,
-                    health_materialization: &health_mat,
-                    health_checks: &health_checks,
-                    health_freshness: &health_freshness,
-                });
-                Ok(())
+                    let health_checks = health
+                        .as_ref()
+                        .map(|h| {
+                            let status = format!("{:?}", h.asset_checks_status);
+                            match &h.asset_checks_status_metadata {
+                                Some(AssetHealthCheckMeta::AssetHealthCheckDegradedMeta(m)) => {
+                                    format!(
+                                        "{status} ({} failed, {} warning of {} checks)",
+                                        m.num_failed_checks,
+                                        m.num_warning_checks,
+                                        m.total_num_checks
+                                    )
+                                }
+                                Some(AssetHealthCheckMeta::AssetHealthCheckWarningMeta(m)) => {
+                                    format!(
+                                        "{status} ({} warning of {} checks)",
+                                        m.num_warning_checks, m.total_num_checks
+                                    )
+                                }
+                                Some(AssetHealthCheckMeta::AssetHealthCheckUnknownMeta(m)) => {
+                                    format!(
+                                        "{status} ({} not executed of {} checks)",
+                                        m.num_not_executed_checks, m.total_num_checks
+                                    )
+                                }
+                                _ => status,
+                            }
+                        })
+                        .unwrap_or_default();
+                    let health_freshness = health
+                        .as_ref()
+                        .map(|h| {
+                            let status = format!("{:?}", h.freshness_status);
+                            match &h.freshness_status_metadata {
+                                Some(m) => match m.last_materialized_timestamp {
+                                    Some(ts) => format!(
+                                        "{status} (last materialized: {})",
+                                        output::format_timestamp(Some(ts))
+                                    ),
+                                    None => status,
+                                },
+                                None => status,
+                            }
+                        })
+                        .unwrap_or_default();
+                    output::format_asset_detail(&output::AssetDetail {
+                        key: &format_asset_key(&node.asset_key.path),
+                        group: &node.group_name,
+                        code_location: &node.repository.location.name,
+                        description: node.description.as_deref().unwrap_or(""),
+                        kinds: &node.kinds,
+                        partitioned: node.is_partitioned,
+                        computed_by: node.op_name.as_deref().unwrap_or(""),
+                        code_version: node.op_version.as_deref().unwrap_or(""),
+                        dependencies: &deps,
+                        dependents: &dependents,
+                        jobs: &node.job_names,
+                        owners: &owners,
+                        automation_condition: &automation,
+                        sensors: &sensors,
+                        schedules: &schedules,
+                        tags: &tags,
+                        metadata: &metadata,
+                        health: &health_overall,
+                        health_materialization: &health_mat,
+                        health_checks: &health_checks,
+                        health_freshness: &health_freshness,
+                    });
+                    Ok(())
+                }
             }
-        },
+        }
         AssetNodeOrError::AssetNotFoundError(err) => {
             anyhow::bail!("Asset not found: {}", err.message)
         }

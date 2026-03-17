@@ -27,7 +27,8 @@ pub fn format_timestamp(epoch: Option<f64>) -> String {
 }
 
 fn status_color(status: &str) -> Color {
-    match status {
+    let s = status.split_once(' ').map_or(status, |(prefix, _)| prefix);
+    match s {
         "Success" | "SUCCEEDED" | "Pass" | "Healthy" => Color::Green,
         "Failure" | "FAILED" | "EXECUTION_FAILED" | "Fail" | "Degraded" => Color::Red,
         "Canceled" | "Canceling" | "SKIPPED" | "Warning" => Color::Yellow,
