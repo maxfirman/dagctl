@@ -167,6 +167,9 @@ struct AssetNodeQuery {
     #[arguments(assetKey: $asset_key)]
     #[cynic(rename = "assetNodeOrError")]
     asset_node_or_error: AssetNodeOrError,
+    #[arguments(assetKey: $asset_key)]
+    #[cynic(rename = "assetOrError")]
+    asset_or_error_health: AssetOrErrorHealth,
 }
 
 #[derive(cynic::InlineFragments, Debug)]
@@ -184,6 +187,50 @@ enum AssetNodeOrError {
 #[cynic(schema_module = "crate::schema::schema")]
 struct AssetNotFoundError {
     message: String,
+}
+
+// --- Asset health (fetched alongside detail) ---
+
+#[derive(cynic::Enum, Clone, Copy, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetHealthStatus")]
+#[cynic(schema_module = "crate::schema::schema")]
+pub enum AssetHealthStatus {
+    Healthy,
+    Warning,
+    Degraded,
+    Unknown,
+    NotApplicable,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetOrError")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetOrErrorHealth {
+    Asset(AssetWithHealth),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster", graphql_type = "Asset")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetWithHealth {
+    #[cynic(rename = "assetHealth")]
+    asset_health: Option<AssetHealth>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetHealth {
+    #[cynic(rename = "assetHealth")]
+    asset_health: AssetHealthStatus,
+    #[cynic(rename = "materializationStatus")]
+    materialization_status: AssetHealthStatus,
+    #[cynic(rename = "assetChecksStatus")]
+    asset_checks_status: AssetHealthStatus,
+    #[cynic(rename = "freshnessStatus")]
+    freshness_status: AssetHealthStatus,
 }
 
 #[derive(cynic::QueryFragment, Debug, Serialize)]
@@ -449,6 +496,10 @@ pub async fn get_asset(
         AssetNodeOrError::AssetNode(node) => match fmt {
             Some(f) => output::render(&node, f),
             None => {
+                let health = match data.asset_or_error_health {
+                    AssetOrErrorHealth::Asset(a) => a.asset_health,
+                    AssetOrErrorHealth::Other => None,
+                };
                 let deps: Vec<_> = node
                     .dependency_keys
                     .iter()
@@ -503,6 +554,22 @@ pub async fn get_asset(
                     .filter(|m| !m.label().is_empty())
                     .map(|m| (m.label().to_string(), m.value()))
                     .collect();
+                let health_overall = health
+                    .as_ref()
+                    .map(|h| format!("{:?}", h.asset_health))
+                    .unwrap_or_default();
+                let health_mat = health
+                    .as_ref()
+                    .map(|h| format!("{:?}", h.materialization_status))
+                    .unwrap_or_default();
+                let health_checks = health
+                    .as_ref()
+                    .map(|h| format!("{:?}", h.asset_checks_status))
+                    .unwrap_or_default();
+                let health_freshness = health
+                    .as_ref()
+                    .map(|h| format!("{:?}", h.freshness_status))
+                    .unwrap_or_default();
                 output::format_asset_detail(&output::AssetDetail {
                     key: &format_asset_key(&node.asset_key.path),
                     group: &node.group_name,
@@ -521,6 +588,10 @@ pub async fn get_asset(
                     schedules: &schedules,
                     tags: &tags,
                     metadata: &metadata,
+                    health: &health_overall,
+                    health_materialization: &health_mat,
+                    health_checks: &health_checks,
+                    health_freshness: &health_freshness,
                 });
                 Ok(())
             }

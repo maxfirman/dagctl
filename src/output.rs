@@ -28,9 +28,9 @@ pub fn format_timestamp(epoch: Option<f64>) -> String {
 
 fn status_color(status: &str) -> Color {
     match status {
-        "Success" | "SUCCEEDED" | "Pass" => Color::Green,
-        "Failure" | "FAILED" | "EXECUTION_FAILED" | "Fail" => Color::Red,
-        "Canceled" | "Canceling" | "SKIPPED" => Color::Yellow,
+        "Success" | "SUCCEEDED" | "Pass" | "Healthy" => Color::Green,
+        "Failure" | "FAILED" | "EXECUTION_FAILED" | "Fail" | "Degraded" => Color::Red,
+        "Canceled" | "Canceling" | "SKIPPED" | "Warning" => Color::Yellow,
         "Started" | "Starting" | "IN_PROGRESS" => Color::Cyan,
         "Queued" | "NotStarted" | "Managed" => Color::White,
         _ => Color::White,
@@ -268,6 +268,10 @@ pub struct AssetDetail<'a> {
     pub schedules: &'a [String],
     pub tags: &'a [String],
     pub metadata: &'a [(String, String)],
+    pub health: &'a str,
+    pub health_materialization: &'a str,
+    pub health_checks: &'a str,
+    pub health_freshness: &'a str,
 }
 
 pub fn format_asset_detail(detail: &AssetDetail) {
@@ -282,6 +286,25 @@ pub fn format_asset_detail(detail: &AssetDetail) {
         Cell::new("Code Location"),
         Cell::new(detail.code_location),
     ]);
+    if !detail.health.is_empty() {
+        table.add_row(vec![
+            Cell::new("Health"),
+            Cell::new(detail.health).fg(status_color(detail.health)),
+        ]);
+        table.add_row(vec![
+            Cell::new("  Materialization"),
+            Cell::new(detail.health_materialization)
+                .fg(status_color(detail.health_materialization)),
+        ]);
+        table.add_row(vec![
+            Cell::new("  Checks"),
+            Cell::new(detail.health_checks).fg(status_color(detail.health_checks)),
+        ]);
+        table.add_row(vec![
+            Cell::new("  Freshness"),
+            Cell::new(detail.health_freshness).fg(status_color(detail.health_freshness)),
+        ]);
+    }
     if !detail.description.is_empty() {
         table.add_row(vec![
             Cell::new("Description"),

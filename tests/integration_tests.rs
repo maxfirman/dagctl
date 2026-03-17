@@ -762,6 +762,17 @@ async fn test_get_asset_success() {
                                 "metadata": {"assetKeys": null}
                             }
                         ]
+                    },
+                    "assetOrError": {
+                        "__typename": "Asset",
+                        "id": "a1",
+                        "key": {"path": ["my_asset"]},
+                        "assetHealth": {
+                            "assetHealth": "HEALTHY",
+                            "materializationStatus": "HEALTHY",
+                            "assetChecksStatus": "NOT_APPLICABLE",
+                            "freshnessStatus": "NOT_APPLICABLE"
+                        }
                     }
                 }
             })
@@ -791,6 +802,10 @@ async fn test_get_asset_not_found() {
             json!({
                 "data": {
                     "assetNodeOrError": {
+                        "__typename": "AssetNotFoundError",
+                        "message": "Asset not found"
+                    },
+                    "assetOrError": {
                         "__typename": "AssetNotFoundError",
                         "message": "Asset not found"
                     }
