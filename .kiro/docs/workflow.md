@@ -43,6 +43,18 @@ dagctl get runs --limit 10
 dagctl get run <RUN_ID>
 ```
 
+## Code Quality
+
+Always run before committing:
+
+```bash
+cargo fmt
+cargo clippy -- -D warnings
+cargo test
+```
+
+All three must pass cleanly — no warnings, no failures.
+
 ## Testing
 
 ```bash

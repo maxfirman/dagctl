@@ -19,8 +19,10 @@ dagctl/
 │   ├── schema.rs                   # #[cynic::schema("dagster")] pub mod schema {} — re-exports the registered schema
 │   └── commands/
 │       ├── mod.rs                  # Re-exports command modules
+│       ├── assets.rs                # Asset list/detail GraphQL queries and handlers
 │       ├── code_locations.rs       # Code location list/detail GraphQL queries and handlers
 │       ├── debug.rs                # Debug/diagnostic command
+│       ├── jobs.rs                 # Job list/detail GraphQL queries and handlers
 │       ├── runs.rs                 # Run list/detail/events/logs GraphQL queries and handlers
 │       ├── schema.rs               # Schema download command (shells out to cynic introspect)
 │       └── update.rs               # Self-update via GitHub releases
@@ -52,6 +54,12 @@ Reads `~/.dagctl/config.toml`. The `Config` struct has optional `token`, `organi
 
 ### `src/commands/runs.rs`
 Contains all cynic-derived GraphQL types and four public async functions: `list_runs`, `get_run`, `get_events`, `get_logs`.
+
+### `src/commands/jobs.rs`
+Lists jobs by querying workspace locations and drilling into repositories. Job detail uses `pipelineOrError` with a `PipelineSelector`. Includes `resolve_job_location` helper that searches across locations or filters by `--code-location`.
+
+### `src/commands/assets.rs`
+Lists assets via `assetNodes` query with client-side filtering by group and code location. Asset detail uses `assetNodeOrError` with slash-separated key parsed into `AssetKeyInput { path }`.
 
 ### `src/commands/code_locations.rs`
 GraphQL queries for listing workspace locations and getting detailed code location info including repositories, schedules, sensors, and jobs.

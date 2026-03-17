@@ -45,7 +45,9 @@ fn new_table() -> Table {
 
 // --- get runs ---
 
-pub fn format_runs_table(runs: &[(String, String, String, Option<f64>, Option<f64>)]) {
+pub type RunRow = (String, String, String, Option<f64>, Option<f64>);
+
+pub fn format_runs_table(runs: &[RunRow]) {
     let mut table = new_table();
     table.set_header(vec!["RUN ID", "JOB", "STATUS", "START", "END"]);
     for (run_id, job, status, start, end) in runs {
@@ -176,4 +178,145 @@ pub fn format_logs_raw(stdout: Option<&str>, stderr: Option<&str>) {
     println!("{}", stdout.unwrap_or(""));
     println!("=== STDERR ===");
     println!("{}", stderr.unwrap_or(""));
+}
+
+// --- get jobs ---
+
+pub fn format_jobs_table(jobs: &[(String, String, usize, usize)]) {
+    let mut table = new_table();
+    table.set_header(vec!["JOB", "CODE LOCATION", "SCHEDULES", "SENSORS"]);
+    for (name, location, schedules, sensors) in jobs {
+        table.add_row(vec![
+            Cell::new(name),
+            Cell::new(location),
+            Cell::new(schedules),
+            Cell::new(sensors),
+        ]);
+    }
+    println!("{table}");
+}
+
+// --- get job (detail) ---
+
+pub fn format_job_detail(
+    name: &str,
+    code_location: &str,
+    description: &str,
+    schedules: &[String],
+    sensors: &[String],
+    tags: &[String],
+) {
+    let mut table = new_table();
+    table.set_header(vec![
+        Cell::new("Field").set_alignment(CellAlignment::Right),
+        Cell::new("Value"),
+    ]);
+    table.add_row(vec![Cell::new("Name"), Cell::new(name)]);
+    table.add_row(vec![Cell::new("Code Location"), Cell::new(code_location)]);
+    if !description.is_empty() {
+        table.add_row(vec![Cell::new("Description"), Cell::new(description)]);
+    }
+    if !schedules.is_empty() {
+        table.add_row(vec![
+            Cell::new("Schedules"),
+            Cell::new(schedules.join("\n")),
+        ]);
+    }
+    if !sensors.is_empty() {
+        table.add_row(vec![Cell::new("Sensors"), Cell::new(sensors.join("\n"))]);
+    }
+    if !tags.is_empty() {
+        table.add_row(vec![Cell::new("Tags"), Cell::new(tags.join("\n"))]);
+    }
+    println!("{table}");
+}
+
+// --- get assets ---
+
+pub fn format_assets_table(assets: &[(String, String, String, String, String)]) {
+    let mut table = new_table();
+    table.set_header(vec![
+        "ASSET KEY",
+        "GROUP",
+        "CODE LOCATION",
+        "COMPUTE KIND",
+        "INFO",
+    ]);
+    for (key, group, location, compute_kind, info) in assets {
+        table.add_row(vec![
+            Cell::new(key),
+            Cell::new(group),
+            Cell::new(location),
+            Cell::new(compute_kind),
+            Cell::new(info),
+        ]);
+    }
+    println!("{table}");
+}
+
+// --- get asset (detail) ---
+
+pub struct AssetDetail<'a> {
+    pub key: &'a str,
+    pub group: &'a str,
+    pub code_location: &'a str,
+    pub description: &'a str,
+    pub compute_kind: &'a str,
+    pub partitioned: bool,
+    pub dependencies: &'a [String],
+    pub dependents: &'a [String],
+    pub jobs: &'a [String],
+    pub owners: &'a [String],
+}
+
+pub fn format_asset_detail(detail: &AssetDetail) {
+    let mut table = new_table();
+    table.set_header(vec![
+        Cell::new("Field").set_alignment(CellAlignment::Right),
+        Cell::new("Value"),
+    ]);
+    table.add_row(vec![Cell::new("Key"), Cell::new(detail.key)]);
+    table.add_row(vec![Cell::new("Group"), Cell::new(detail.group)]);
+    table.add_row(vec![
+        Cell::new("Code Location"),
+        Cell::new(detail.code_location),
+    ]);
+    if !detail.description.is_empty() {
+        table.add_row(vec![
+            Cell::new("Description"),
+            Cell::new(detail.description),
+        ]);
+    }
+    if !detail.compute_kind.is_empty() {
+        table.add_row(vec![
+            Cell::new("Compute Kind"),
+            Cell::new(detail.compute_kind),
+        ]);
+    }
+    table.add_row(vec![
+        Cell::new("Partitioned"),
+        Cell::new(if detail.partitioned { "Yes" } else { "No" }),
+    ]);
+    if !detail.owners.is_empty() {
+        table.add_row(vec![
+            Cell::new("Owners"),
+            Cell::new(detail.owners.join("\n")),
+        ]);
+    }
+    if !detail.jobs.is_empty() {
+        table.add_row(vec![Cell::new("Jobs"), Cell::new(detail.jobs.join("\n"))]);
+    }
+    if !detail.dependencies.is_empty() {
+        table.add_row(vec![
+            Cell::new("Dependencies"),
+            Cell::new(detail.dependencies.join("\n")),
+        ]);
+    }
+    if !detail.dependents.is_empty() {
+        table.add_row(vec![
+            Cell::new("Dependents"),
+            Cell::new(detail.dependents.join("\n")),
+        ]);
+    }
+    println!("{table}");
 }

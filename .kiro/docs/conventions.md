@@ -4,8 +4,9 @@
 
 - Use `anyhow::Result` for all fallible functions — no custom error types currently
 - Use `anyhow::bail!()` for error returns with descriptive messages
-- Errors go to stderr (via `eprintln!` in main), data goes to stdout as JSON
+- Errors go to stderr (via `eprintln!` in main), data goes to stdout
 - Exit code 1 on any error
+- Always run `cargo fmt` and `cargo clippy -- -D warnings` before committing — both must pass cleanly
 
 ## GraphQL / Cynic Patterns
 

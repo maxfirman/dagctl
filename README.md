@@ -145,6 +145,36 @@ dagctl get code-locations
 dagctl get code-location <NAME>
 ```
 
+### Jobs
+
+```bash
+# List all jobs across all code locations
+dagctl get jobs
+
+# List jobs in a specific code location
+dagctl get jobs --code-location <NAME>
+
+# Get details for a specific job
+dagctl get job <NAME> --code-location <LOC>
+```
+
+### Assets
+
+```bash
+# List all assets
+dagctl get assets
+
+# Filter assets by group
+dagctl get assets --group <GROUP>
+
+# Filter assets by code location
+dagctl get assets --code-location <NAME>
+
+# Get details for a specific asset (slash-separated key)
+dagctl get asset <KEY>
+dagctl get asset my_prefix/my_asset
+```
+
 ### Schema Management
 
 Download or update the GraphQL schema (needed when building from source):

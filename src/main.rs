@@ -76,6 +76,26 @@ enum GetResource {
     /// Show details of a specific code location
     #[command(name = "code-location")]
     CodeLocation { name: String },
+    /// List jobs
+    Jobs {
+        #[arg(long)]
+        code_location: Option<String>,
+    },
+    /// Show details of a specific job
+    Job {
+        name: String,
+        #[arg(long, required = true)]
+        code_location: String,
+    },
+    /// List assets
+    Assets {
+        #[arg(long)]
+        group: Option<String>,
+        #[arg(long)]
+        code_location: Option<String>,
+    },
+    /// Show details of a specific asset (use slash-separated key, e.g. my_prefix/my_asset)
+    Asset { key: String },
 }
 
 #[derive(Subcommand)]
@@ -140,6 +160,25 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             GetResource::CodeLocation { name } => tokio::runtime::Runtime::new()?.block_on(async {
                 commands::code_locations::get_code_location(&token, &api_url, name, &fmt).await
             }),
+            GetResource::Jobs { code_location } => {
+                tokio::runtime::Runtime::new()?.block_on(async {
+                    commands::jobs::list_jobs(&token, &api_url, code_location, &fmt).await
+                })
+            }
+            GetResource::Job {
+                name,
+                code_location,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::jobs::get_job(&token, &api_url, name, &code_location, &fmt).await
+            }),
+            GetResource::Assets {
+                group,
+                code_location,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::assets::list_assets(&token, &api_url, group, code_location, &fmt).await
+            }),
+            GetResource::Asset { key } => tokio::runtime::Runtime::new()?
+                .block_on(async { commands::assets::get_asset(&token, &api_url, key, &fmt).await }),
         },
         Commands::Events { run_id } => tokio::runtime::Runtime::new()?
             .block_on(async { commands::runs::get_events(&token, &api_url, run_id, &fmt).await }),

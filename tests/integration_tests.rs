@@ -508,3 +508,277 @@ async fn test_get_code_location_loading_state() {
     mock.assert_async().await;
     assert!(result.is_ok());
 }
+
+// --- Jobs tests ---
+
+#[tokio::test]
+async fn test_list_jobs_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "workspaceOrError": {
+                        "__typename": "Workspace",
+                        "id": "workspace",
+                        "locationEntries": [
+                            {
+                                "id": "loc1",
+                                "name": "my-location",
+                                "locationOrLoadError": {
+                                    "__typename": "RepositoryLocation",
+                                    "id": "rl1",
+                                    "name": "my-location",
+                                    "repositories": [
+                                        {
+                                            "id": "repo1",
+                                            "name": "__repository__",
+                                            "jobs": [
+                                                {
+                                                    "id": "j1",
+                                                    "name": "my_job",
+                                                    "isJob": true,
+                                                    "schedules": [
+                                                        {"id": "s1", "name": "daily_schedule"}
+                                                    ],
+                                                    "sensors": []
+                                                },
+                                                {
+                                                    "id": "j2",
+                                                    "name": "__ASSET_JOB",
+                                                    "isJob": false,
+                                                    "schedules": [],
+                                                    "sensors": []
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::jobs::list_jobs("test-token", &api_url, None, &None).await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_list_jobs_with_code_location_filter() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "workspaceOrError": {
+                        "__typename": "Workspace",
+                        "id": "workspace",
+                        "locationEntries": [
+                            {
+                                "id": "loc1",
+                                "name": "location-a",
+                                "locationOrLoadError": {
+                                    "__typename": "RepositoryLocation",
+                                    "id": "rl1",
+                                    "name": "location-a",
+                                    "repositories": [{
+                                        "id": "r1",
+                                        "name": "__repository__",
+                                        "jobs": [{
+                                            "id": "j1",
+                                            "name": "job_a",
+                                            "isJob": true,
+                                            "schedules": [],
+                                            "sensors": []
+                                        }]
+                                    }]
+                                }
+                            },
+                            {
+                                "id": "loc2",
+                                "name": "location-b",
+                                "locationOrLoadError": {
+                                    "__typename": "RepositoryLocation",
+                                    "id": "rl2",
+                                    "name": "location-b",
+                                    "repositories": [{
+                                        "id": "r2",
+                                        "name": "__repository__",
+                                        "jobs": [{
+                                            "id": "j2",
+                                            "name": "job_b",
+                                            "isJob": true,
+                                            "schedules": [],
+                                            "sensors": []
+                                        }]
+                                    }]
+                                }
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::jobs::list_jobs(
+        "test-token",
+        &api_url,
+        Some("location-a".to_string()),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+// --- Assets tests ---
+
+#[tokio::test]
+async fn test_list_assets_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodes": [
+                        {
+                            "id": "a1",
+                            "assetKey": {"path": ["my_prefix", "my_asset"]},
+                            "groupName": "default",
+                            "computeKind": "python",
+                            "isPartitioned": false,
+                            "repository": {
+                                "id": "r1",
+                                "name": "__repository__",
+                                "location": {
+                                    "id": "l1",
+                                    "name": "my-location"
+                                }
+                            }
+                        }
+                    ]
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result =
+        dagctl::commands::assets::list_assets("test-token", &api_url, None, None, &None).await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodeOrError": {
+                        "__typename": "AssetNode",
+                        "id": "a1",
+                        "assetKey": {"path": ["my_asset"]},
+                        "groupName": "default",
+                        "description": "A test asset",
+                        "computeKind": "python",
+                        "isPartitioned": false,
+                        "jobNames": ["my_job"],
+                        "dependencyKeys": [{"path": ["upstream"]}],
+                        "dependedByKeys": [{"path": ["downstream"]}],
+                        "repository": {
+                            "id": "r1",
+                            "name": "__repository__",
+                            "location": {
+                                "id": "l1",
+                                "name": "my-location"
+                            }
+                        },
+                        "owners": [
+                            {"__typename": "UserAssetOwner", "email": "user@example.com"}
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result =
+        dagctl::commands::assets::get_asset("test-token", &api_url, "my_asset".to_string(), &None)
+            .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_not_found() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodeOrError": {
+                        "__typename": "AssetNotFoundError",
+                        "message": "Asset not found"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset(
+        "test-token",
+        &api_url,
+        "nonexistent".to_string(),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not found"));
+}
