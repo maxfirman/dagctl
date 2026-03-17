@@ -39,10 +39,34 @@ pub enum AssetHealthStatusFilter {
     NotApplicable,
 }
 
+// Query 1: fast asset metadata via assetNodes
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(schema = "dagster", graphql_type = "CloudQuery")]
 #[cynic(schema_module = "crate::schema::schema")]
-struct AssetsQuery {
+struct AssetNodesQuery {
+    #[cynic(rename = "assetNodes")]
+    asset_nodes: Vec<AssetNodeSummary>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetNode")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetNodeSummary {
+    #[cynic(rename = "assetKey")]
+    asset_key: AssetKey,
+    #[cynic(rename = "groupName")]
+    group_name: String,
+    kinds: Vec<String>,
+    #[cynic(rename = "isPartitioned")]
+    is_partitioned: bool,
+    repository: AssetRepository,
+}
+
+// Query 2: fast health via assetsOrError (no definition traversal)
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster", graphql_type = "CloudQuery")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetsHealthQuery {
     #[cynic(rename = "assetsOrError")]
     assets_or_error: AssetsOrErrorList,
 }
@@ -60,17 +84,16 @@ enum AssetsOrErrorList {
 #[cynic(schema = "dagster")]
 #[cynic(schema_module = "crate::schema::schema")]
 struct AssetConnection {
-    nodes: Vec<AssetListNode>,
+    nodes: Vec<AssetHealthNode>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(schema = "dagster", graphql_type = "Asset")]
 #[cynic(schema_module = "crate::schema::schema")]
-struct AssetListNode {
+struct AssetHealthNode {
     key: AssetKey,
     #[cynic(rename = "assetHealth")]
     asset_health: Option<AssetHealthSummary>,
-    definition: Option<AssetListDefinition>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Serialize)]
@@ -79,18 +102,6 @@ struct AssetListNode {
 struct AssetHealthSummary {
     #[cynic(rename = "assetHealth")]
     asset_health: AssetHealthStatus,
-}
-
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(schema = "dagster", graphql_type = "AssetNode")]
-#[cynic(schema_module = "crate::schema::schema")]
-struct AssetListDefinition {
-    #[cynic(rename = "groupName")]
-    group_name: String,
-    kinds: Vec<String>,
-    #[cynic(rename = "isPartitioned")]
-    is_partitioned: bool,
-    repository: AssetRepository,
 }
 
 #[derive(cynic::QueryFragment, Debug, Serialize)]
@@ -126,42 +137,62 @@ pub async fn list_assets(
     fmt: &Option<OutputFormat>,
 ) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
+    use std::collections::HashMap;
 
-    let response = reqwest::Client::new()
-        .post(api_url)
-        .header("Authorization", format!("Bearer {}", token))
-        .run_graphql(AssetsQuery::build(()))
-        .await?;
+    let client = reqwest::Client::new();
 
-    if let Some(errors) = response.errors {
+    // Run both queries in parallel
+    let (nodes_resp, health_resp) = tokio::join!(
+        client
+            .post(api_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .run_graphql(AssetNodesQuery::build(())),
+        client
+            .post(api_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .run_graphql(AssetsHealthQuery::build(())),
+    );
+
+    let nodes_resp = nodes_resp?;
+    if let Some(errors) = nodes_resp.errors {
         anyhow::bail!("GraphQL errors: {:?}", errors);
     }
-
-    let data = response
+    let nodes_data = nodes_resp
         .data
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
-    let nodes = match data.assets_or_error {
-        AssetsOrErrorList::AssetConnection(conn) => conn.nodes,
-        AssetsOrErrorList::Other => anyhow::bail!("Unexpected response type from API"),
-    };
-
-    let entries: Vec<AssetListEntry> = nodes
+    let health_resp = health_resp?;
+    let health_map: HashMap<String, String> = health_resp
+        .data
+        .and_then(|d| match d.assets_or_error {
+            AssetsOrErrorList::AssetConnection(conn) => Some(conn.nodes),
+            AssetsOrErrorList::Other => None,
+        })
+        .unwrap_or_default()
         .into_iter()
-        .filter_map(|n| {
-            let def = n.definition.as_ref()?;
-            let health_str = n
+        .map(|n| {
+            let key = format_asset_key(&n.key.path);
+            let status = n
                 .asset_health
-                .as_ref()
                 .map(|h| format!("{:?}", h.asset_health))
                 .unwrap_or_default();
+            (key, status)
+        })
+        .collect();
+
+    let entries: Vec<AssetListEntry> = nodes_data
+        .asset_nodes
+        .into_iter()
+        .filter_map(|n| {
+            let key = format_asset_key(&n.asset_key.path);
+            let health_str = health_map.get(&key).cloned().unwrap_or_default();
             if let Some(ref g) = group
-                && &def.group_name != g
+                && &n.group_name != g
             {
                 return None;
             }
             if let Some(ref loc) = code_location
-                && &def.repository.location.name != loc
+                && &n.repository.location.name != loc
             {
                 return None;
             }
@@ -178,11 +209,11 @@ pub async fn list_assets(
                 }
             }
             Some(AssetListEntry {
-                key: format_asset_key(&n.key.path),
-                group: def.group_name.clone(),
-                code_location: def.repository.location.name.clone(),
-                kinds: def.kinds.clone(),
-                partitioned: def.is_partitioned,
+                key,
+                group: n.group_name,
+                code_location: n.repository.location.name,
+                kinds: n.kinds,
+                partitioned: n.is_partitioned,
                 health: health_str,
             })
         })

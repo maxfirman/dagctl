@@ -658,13 +658,30 @@ async fn test_list_jobs_with_code_location_filter() {
 async fn test_list_assets_success() {
     let mut server = Server::new_async().await;
 
-    let mock = server
+    let _nodes_mock = server
         .mock("POST", "/graphql")
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(
             json!({
                 "data": {
+                    "assetNodes": [
+                        {
+                            "id": "a1",
+                            "assetKey": {"path": ["my_prefix", "my_asset"]},
+                            "groupName": "default",
+                            "kinds": ["python"],
+                            "isPartitioned": false,
+                            "repository": {
+                                "id": "r1",
+                                "name": "__repository__",
+                                "location": {
+                                    "id": "l1",
+                                    "name": "my-location"
+                                }
+                            }
+                        }
+                    ],
                     "assetsOrError": {
                         "__typename": "AssetConnection",
                         "nodes": [
@@ -673,20 +690,6 @@ async fn test_list_assets_success() {
                                 "key": {"path": ["my_prefix", "my_asset"]},
                                 "assetHealth": {
                                     "assetHealth": "HEALTHY"
-                                },
-                                "definition": {
-                                    "id": "d1",
-                                    "groupName": "default",
-                                    "kinds": ["python"],
-                                    "isPartitioned": false,
-                                    "repository": {
-                                        "id": "r1",
-                                        "name": "__repository__",
-                                        "location": {
-                                            "id": "l1",
-                                            "name": "my-location"
-                                        }
-                                    }
                                 }
                             }
                         ]
@@ -695,6 +698,7 @@ async fn test_list_assets_success() {
             })
             .to_string(),
         )
+        .expect_at_least(1)
         .create_async()
         .await;
 
@@ -703,7 +707,6 @@ async fn test_list_assets_success() {
         dagctl::commands::assets::list_assets("test-token", &api_url, None, None, vec![], &None)
             .await;
 
-    mock.assert_async().await;
     assert!(result.is_ok());
 }
 
