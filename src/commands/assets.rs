@@ -39,11 +39,118 @@ pub enum AssetHealthStatusFilter {
     NotApplicable,
 }
 
-// Query 1: fast asset metadata via assetNodes
+// Resolve group -> (repositoryName, codeLocationName) via searchFieldValues
+
+#[derive(cynic::Enum, Clone, Copy, Debug)]
+#[cynic(schema = "dagster", graphql_type = "SearchAssetDefFields")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum SearchAssetDefFields {
+    OrganizationId,
+    DeploymentId,
+    Name,
+    AssetKey,
+    Group,
+    GroupAddress,
+    Kind,
+    CodeLocationVersion,
+    RepositoryName,
+    LocationName,
+    RepoAddress,
+    Owners,
+    Tags,
+    Description,
+    Columns,
+    ColumnNames,
+    ColumnTags,
+    TableName,
+    SerializationVersion,
+}
+
+#[derive(cynic::QueryVariables, Debug)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct SearchFieldValuesVariables {
+    #[cynic(rename = "fieldValueQuery")]
+    field_value_query: String,
+    field: Option<SearchAssetDefFields>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "SearchFieldValuesVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct SearchFieldValuesQuery {
+    #[arguments(fieldValueQuery: $field_value_query, field: $field)]
+    #[cynic(rename = "searchFieldValues")]
+    search_field_values: SearchResultsCountsOrError,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(schema = "dagster", graphql_type = "SearchResultsCountsOrError")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum SearchResultsCountsOrError {
+    SearchResultCountsByDimension(SearchResultCountsByDimension),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct SearchResultCountsByDimension {
+    groups: Vec<AssetGroupSearchResultCount>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetGroupSearchResultCount {
+    #[cynic(rename = "repositoryName")]
+    repository_name: String,
+    #[cynic(rename = "codeLocationName")]
+    code_location_name: String,
+    group: String,
+}
+
+// assetNodes query (unfiltered)
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(schema = "dagster", graphql_type = "CloudQuery")]
 #[cynic(schema_module = "crate::schema::schema")]
 struct AssetNodesQuery {
+    #[cynic(rename = "assetNodes")]
+    asset_nodes: Vec<AssetNodeSummary>,
+}
+
+// assetNodes query (filtered by group)
+#[derive(cynic::InputObject, Debug)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetGroupSelector {
+    #[cynic(rename = "groupName")]
+    group_name: String,
+    #[cynic(rename = "repositoryName")]
+    repository_name: String,
+    #[cynic(rename = "repositoryLocationName")]
+    repository_location_name: String,
+}
+
+#[derive(cynic::QueryVariables, Debug)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetNodesFilteredVariables {
+    group: Option<AssetGroupSelector>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "AssetNodesFilteredVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetNodesFilteredQuery {
+    #[arguments(group: $group)]
     #[cynic(rename = "assetNodes")]
     asset_nodes: Vec<AssetNodeSummary>,
 }
@@ -62,11 +169,32 @@ struct AssetNodeSummary {
     repository: AssetRepository,
 }
 
-// Query 2: fast health via assetsOrError (no definition traversal)
+// Health queries
+
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(schema = "dagster", graphql_type = "CloudQuery")]
 #[cynic(schema_module = "crate::schema::schema")]
 struct AssetsHealthQuery {
+    #[cynic(rename = "assetsOrError")]
+    assets_or_error: AssetsOrErrorList,
+}
+
+#[derive(cynic::QueryVariables, Debug)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetsHealthFilteredVariables {
+    #[cynic(rename = "assetKeys")]
+    asset_keys: Option<Vec<AssetKeyInput>>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "AssetsHealthFilteredVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetsHealthFilteredQuery {
+    #[arguments(assetKeys: $asset_keys)]
     #[cynic(rename = "assetsOrError")]
     assets_or_error: AssetsOrErrorList,
 }
@@ -140,62 +268,120 @@ pub async fn list_assets(
     use std::collections::HashMap;
 
     let client = reqwest::Client::new();
+    let auth = format!("Bearer {}", token);
 
-    // Run both queries in parallel
-    let (nodes_resp, health_resp) = tokio::join!(
-        client
+    // Resolve group selector if --group is provided
+    let group_selectors: Vec<AssetGroupSelector> = if let Some(ref g) = group {
+        let resp = client
             .post(api_url)
-            .header("Authorization", format!("Bearer {}", token))
-            .run_graphql(AssetNodesQuery::build(())),
-        client
-            .post(api_url)
-            .header("Authorization", format!("Bearer {}", token))
-            .run_graphql(AssetsHealthQuery::build(())),
-    );
+            .header("Authorization", &auth)
+            .run_graphql(SearchFieldValuesQuery::build(SearchFieldValuesVariables {
+                field_value_query: g.clone(),
+                field: Some(SearchAssetDefFields::Group),
+            }))
+            .await?;
+        let data = resp
+            .data
+            .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+        match data.search_field_values {
+            SearchResultsCountsOrError::SearchResultCountsByDimension(d) => d
+                .groups
+                .into_iter()
+                .filter(|r| {
+                    &r.group == g
+                        && code_location
+                            .as_ref()
+                            .is_none_or(|loc| &r.code_location_name == loc)
+                })
+                .map(|r| AssetGroupSelector {
+                    group_name: r.group,
+                    repository_name: r.repository_name,
+                    repository_location_name: r.code_location_name,
+                })
+                .collect(),
+            SearchResultsCountsOrError::Other => vec![],
+        }
+    } else {
+        vec![]
+    };
 
-    let nodes_resp = nodes_resp?;
-    if let Some(errors) = nodes_resp.errors {
-        anyhow::bail!("GraphQL errors: {:?}", errors);
+    // Fetch asset nodes — use server-side filter if we resolved group selectors
+    let mut all_nodes = Vec::new();
+    if !group_selectors.is_empty() {
+        // Fetch each group selector (usually 1-2)
+        for gs in group_selectors {
+            let resp = client
+                .post(api_url)
+                .header("Authorization", &auth)
+                .run_graphql(AssetNodesFilteredQuery::build(
+                    AssetNodesFilteredVariables { group: Some(gs) },
+                ))
+                .await?;
+            if let Some(data) = resp.data {
+                all_nodes.extend(data.asset_nodes);
+            }
+        }
+    } else {
+        let resp = client
+            .post(api_url)
+            .header("Authorization", &auth)
+            .run_graphql(AssetNodesQuery::build(()))
+            .await?;
+        if let Some(errors) = resp.errors {
+            anyhow::bail!("GraphQL errors: {:?}", errors);
+        }
+        all_nodes = resp
+            .data
+            .ok_or_else(|| anyhow::anyhow!("No data in response"))?
+            .asset_nodes;
     }
-    let nodes_data = nodes_resp
-        .data
-        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
-    let health_resp = health_resp?;
-    let health_map: HashMap<String, String> = health_resp
-        .data
-        .and_then(|d| match d.assets_or_error {
-            AssetsOrErrorList::AssetConnection(conn) => Some(conn.nodes),
-            AssetsOrErrorList::Other => None,
-        })
-        .unwrap_or_default()
-        .into_iter()
-        .map(|n| {
-            let key = format_asset_key(&n.key.path);
-            let status = n
-                .asset_health
-                .map(|h| format!("{:?}", h.asset_health))
-                .unwrap_or_default();
-            (key, status)
-        })
-        .collect();
+    // Client-side filter for code_location when no group filter was used
+    if group.is_none()
+        && let Some(ref loc) = code_location
+    {
+        all_nodes.retain(|n| &n.repository.location.name == loc);
+    }
 
-    let entries: Vec<AssetListEntry> = nodes_data
-        .asset_nodes
+    // Fetch health — use filtered keys if we have a subset
+    let asset_keys: Option<Vec<AssetKeyInput>> = if group.is_some() || code_location.is_some() {
+        Some(
+            all_nodes
+                .iter()
+                .map(|n| AssetKeyInput {
+                    path: n.asset_key.path.clone(),
+                })
+                .collect(),
+        )
+    } else {
+        None
+    };
+
+    let health_map: HashMap<String, String> = if let Some(keys) = asset_keys {
+        let resp = client
+            .post(api_url)
+            .header("Authorization", &auth)
+            .run_graphql(AssetsHealthFilteredQuery::build(
+                AssetsHealthFilteredVariables {
+                    asset_keys: Some(keys),
+                },
+            ))
+            .await?;
+        extract_health_map(resp.data)
+    } else {
+        let resp = client
+            .post(api_url)
+            .header("Authorization", &auth)
+            .run_graphql(AssetsHealthQuery::build(()))
+            .await?;
+        extract_health_map(resp.data)
+    };
+
+    let entries: Vec<AssetListEntry> = all_nodes
         .into_iter()
         .filter_map(|n| {
             let key = format_asset_key(&n.asset_key.path);
             let health_str = health_map.get(&key).cloned().unwrap_or_default();
-            if let Some(ref g) = group
-                && &n.group_name != g
-            {
-                return None;
-            }
-            if let Some(ref loc) = code_location
-                && &n.repository.location.name != loc
-            {
-                return None;
-            }
             if !health_filter.is_empty() {
                 let matches = health_filter.iter().any(|f| match f {
                     AssetHealthStatusFilter::Healthy => health_str == "Healthy",
@@ -241,6 +427,45 @@ pub async fn list_assets(
                 .collect();
             output::format_assets_table(&rows);
             Ok(())
+        }
+    }
+}
+
+fn extract_health_map<T: HasAssetsOrError>(
+    data: Option<T>,
+) -> std::collections::HashMap<String, String> {
+    data.and_then(|d| d.into_nodes())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|n| {
+            let key = format_asset_key(&n.key.path);
+            let status = n
+                .asset_health
+                .map(|h| format!("{:?}", h.asset_health))
+                .unwrap_or_default();
+            (key, status)
+        })
+        .collect()
+}
+
+trait HasAssetsOrError {
+    fn into_nodes(self) -> Option<Vec<AssetHealthNode>>;
+}
+
+impl HasAssetsOrError for AssetsHealthQuery {
+    fn into_nodes(self) -> Option<Vec<AssetHealthNode>> {
+        match self.assets_or_error {
+            AssetsOrErrorList::AssetConnection(c) => Some(c.nodes),
+            AssetsOrErrorList::Other => None,
+        }
+    }
+}
+
+impl HasAssetsOrError for AssetsHealthFilteredQuery {
+    fn into_nodes(self) -> Option<Vec<AssetHealthNode>> {
+        match self.assets_or_error {
+            AssetsOrErrorList::AssetConnection(c) => Some(c.nodes),
+            AssetsOrErrorList::Other => None,
         }
     }
 }
