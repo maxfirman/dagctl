@@ -368,7 +368,13 @@ pub async fn get_asset(
                 let tags: Vec<_> = node
                     .tags
                     .iter()
-                    .map(|t| format!("{}={}", t.key, t.value))
+                    .map(|t| {
+                        if t.value.is_empty() {
+                            t.key.clone()
+                        } else {
+                            format!("{}={}", t.key, t.value)
+                        }
+                    })
                     .collect();
                 output::format_asset_detail(&output::AssetDetail {
                     key: &format_asset_key(&node.asset_key.path),
