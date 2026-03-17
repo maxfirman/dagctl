@@ -2172,6 +2172,17 @@ pub async fn get_asset_check(
 
 // --- Asset check executions ---
 
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
+pub enum CheckExecutionStatusFilter {
+    #[value(name = "in-progress")]
+    InProgress,
+    Succeeded,
+    Failed,
+    #[value(name = "execution-failed")]
+    ExecutionFailed,
+    Skipped,
+}
+
 #[derive(cynic::QueryVariables, Debug)]
 #[cynic(schema_module = "crate::schema::schema")]
 struct AssetCheckExecutionsQueryVariables {
@@ -2180,6 +2191,7 @@ struct AssetCheckExecutionsQueryVariables {
     #[cynic(rename = "checkName")]
     check_name: String,
     limit: i32,
+    cursor: Option<String>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -2190,7 +2202,7 @@ struct AssetCheckExecutionsQueryVariables {
 )]
 #[cynic(schema_module = "crate::schema::schema")]
 struct AssetCheckExecutionsQuery {
-    #[arguments(assetKey: $asset_key, checkName: $check_name, limit: $limit)]
+    #[arguments(assetKey: $asset_key, checkName: $check_name, limit: $limit, cursor: $cursor)]
     #[cynic(rename = "assetCheckExecutions")]
     asset_check_executions: Vec<AssetCheckExecutionRow>,
 }
@@ -2199,6 +2211,7 @@ struct AssetCheckExecutionsQuery {
 #[cynic(schema = "dagster", graphql_type = "AssetCheckExecution")]
 #[cynic(schema_module = "crate::schema::schema")]
 struct AssetCheckExecutionRow {
+    id: String,
     status: AssetCheckExecutionResolvedStatus,
     #[cynic(rename = "runId")]
     run_id: String,
@@ -2220,37 +2233,67 @@ pub async fn get_asset_check_executions(
     key: String,
     check_name: &str,
     limit: Option<i32>,
+    status: Vec<CheckExecutionStatusFilter>,
     fmt: &Option<OutputFormat>,
 ) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
-    let operation = AssetCheckExecutionsQuery::build(AssetCheckExecutionsQueryVariables {
-        asset_key: AssetKeyInput {
-            path: parse_asset_key(&key),
-        },
-        check_name: check_name.to_string(),
-        limit: limit.unwrap_or(25),
-    });
+    let desired = limit.unwrap_or(25) as usize;
+    let page_size = desired as i32;
+    let asset_path = parse_asset_key(&key);
+    let mut collected: Vec<AssetCheckExecutionRow> = Vec::new();
+    let mut cursor: Option<String> = None;
 
-    let response = reqwest::Client::new()
-        .post(api_url)
-        .header("Authorization", format!("Bearer {}", token))
-        .run_graphql(operation)
-        .await?;
+    loop {
+        let operation = AssetCheckExecutionsQuery::build(AssetCheckExecutionsQueryVariables {
+            asset_key: AssetKeyInput {
+                path: asset_path.clone(),
+            },
+            check_name: check_name.to_string(),
+            limit: page_size,
+            cursor: cursor.clone(),
+        });
 
-    if let Some(errors) = response.errors {
-        anyhow::bail!("GraphQL errors: {:?}", errors);
+        let response = reqwest::Client::new()
+            .post(api_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .run_graphql(operation)
+            .await?;
+
+        if let Some(errors) = response.errors {
+            anyhow::bail!("GraphQL errors: {:?}", errors);
+        }
+
+        let data = response
+            .data
+            .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
+        let page = data.asset_check_executions;
+        let page_len = page.len();
+
+        if page.is_empty() {
+            break;
+        }
+
+        cursor = page.last().map(|e| e.id.clone());
+
+        if status.is_empty() {
+            collected.extend(page);
+        } else {
+            collected.extend(page.into_iter().filter(|e| matches_status(&status, &e.status)));
+        }
+
+        if collected.len() >= desired || page_len < page_size as usize {
+            break;
+        }
     }
 
-    let data = response
-        .data
-        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+    collected.truncate(desired);
 
-    let executions = data.asset_check_executions;
     match fmt {
-        Some(f) => output::render(&executions, f),
+        Some(f) => output::render(&collected, f),
         None => {
-            let rows: Vec<_> = executions
+            let rows: Vec<_> = collected
                 .iter()
                 .map(|e| {
                     let severity = e
@@ -2271,4 +2314,17 @@ pub async fn get_asset_check_executions(
             Ok(())
         }
     }
+}
+
+fn matches_status(
+    filters: &[CheckExecutionStatusFilter],
+    status: &AssetCheckExecutionResolvedStatus,
+) -> bool {
+    filters.iter().any(|f| match f {
+        CheckExecutionStatusFilter::InProgress => matches!(status, AssetCheckExecutionResolvedStatus::InProgress),
+        CheckExecutionStatusFilter::Succeeded => matches!(status, AssetCheckExecutionResolvedStatus::Succeeded),
+        CheckExecutionStatusFilter::Failed => matches!(status, AssetCheckExecutionResolvedStatus::Failed),
+        CheckExecutionStatusFilter::ExecutionFailed => matches!(status, AssetCheckExecutionResolvedStatus::ExecutionFailed),
+        CheckExecutionStatusFilter::Skipped => matches!(status, AssetCheckExecutionResolvedStatus::Skipped),
+    })
 }

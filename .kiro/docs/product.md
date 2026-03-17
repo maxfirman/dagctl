@@ -13,7 +13,7 @@ Data engineers and platform teams who manage Dagster pipelines and need CLI-base
 - **Run queries**: List runs (with optional limit), get run details, fetch run events, retrieve captured logs
 - **Code locations**: List and inspect code locations with metadata, schedules, sensors, and jobs
 - **Jobs**: List jobs across all code locations or filter by location, inspect job details including schedules, sensors, and tags
-- **Assets**: List asset nodes with group and code location filters, inspect asset details including dependencies, dependents, owners, and jobs
+- **Assets**: List asset nodes with group and code location filters, inspect asset details including dependencies, dependents, owners, and jobs. Asset check executions support client-side status filtering with cursor-based pagination.
 - **Schema management**: Download the Dagster GraphQL schema for building from source
 - **Authentication**: Token resolution via CLI flag → env var → config file (priority order)
 - **Shell completion**: Generate completions for bash, zsh, fish, and PowerShell

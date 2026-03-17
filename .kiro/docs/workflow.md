@@ -90,6 +90,7 @@ cargo llvm-cov --all-features --workspace --html
 3. Implement the handler in the appropriate `src/commands/*.rs` module
 4. Follow the GraphQL/cynic patterns in `conventions.md`
 5. Add integration tests in `tests/integration_tests.rs`
+6. Update the hardcoded SKILL.md content in `src/commands/skill.rs` to reflect any new or changed commands, flags, or usage patterns
 
 ## Updating the Schema
 

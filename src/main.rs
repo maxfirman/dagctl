@@ -148,6 +148,9 @@ enum GetResource {
         check: String,
         #[arg(long)]
         limit: Option<i32>,
+        /// Filter by status (comma-separated: in-progress,succeeded,failed,execution-failed,skipped)
+        #[arg(long, value_delimiter = ',')]
+        status: Vec<commands::assets::CheckExecutionStatusFilter>,
     },
 }
 
@@ -161,6 +164,12 @@ enum SchemaCommands {
 enum SelfCommands {
     /// Update dagctl to the latest release
     Update,
+    /// Generate a Kiro SKILL.md file
+    Skill {
+        /// Write to ~/.kiro/skills/dagctl/SKILL.md instead of stdout
+        #[arg(long)]
+        install: bool,
+    },
 }
 
 fn main() {
@@ -173,11 +182,14 @@ fn main() {
 }
 
 fn run(cli: Cli) -> anyhow::Result<()> {
-    if let Commands::SelfCmd {
-        action: SelfCommands::Update,
-    } = &cli.command
-    {
-        return commands::update::run_update();
+    match &cli.command {
+        Commands::SelfCmd {
+            action: SelfCommands::Update,
+        } => return commands::update::run_update(),
+        Commands::SelfCmd {
+            action: SelfCommands::Skill { install },
+        } => return commands::skill::run_skill(*install),
+        _ => {}
     }
 
     if let Commands::Completion { shell } = &cli.command {
@@ -289,10 +301,10 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                     commands::assets::get_asset_check(&token, &api_url, key, &check, &fmt).await
                 })
             }
-            GetResource::AssetCheckExecutions { key, check, limit } => {
+            GetResource::AssetCheckExecutions { key, check, limit, status } => {
                 tokio::runtime::Runtime::new()?.block_on(async {
                     commands::assets::get_asset_check_executions(
-                        &token, &api_url, key, &check, limit, &fmt,
+                        &token, &api_url, key, &check, limit, status, &fmt,
                     )
                     .await
                 })

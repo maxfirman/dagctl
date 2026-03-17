@@ -114,6 +114,22 @@ exec zsh
 dagctl completion fish > ~/.config/fish/completions/dagctl.fish
 ```
 
+## Kiro Skill
+
+dagctl ships with a built-in [Kiro](https://kiro.dev) skill that teaches the AI assistant how to use the CLI. To install it:
+
+```bash
+dagctl self skill --install
+```
+
+This writes a `SKILL.md` file to `~/.kiro/skills/dagctl/`. Once installed, Kiro will automatically know how to use dagctl commands when you ask it to interact with Dagster Cloud.
+
+To preview the skill content without installing:
+
+```bash
+dagctl self skill
+```
+
 ## Usage
 
 ### Runs
@@ -220,6 +236,10 @@ dagctl get asset-check <KEY> <CHECK_NAME>
 # List historic executions for an asset check
 dagctl get asset-check-executions <KEY> <CHECK_NAME>
 dagctl get asset-check-executions <KEY> <CHECK_NAME> --limit 20
+
+# Filter by status (comma-separated: in-progress,succeeded,failed,execution-failed,skipped)
+dagctl get asset-check-executions <KEY> <CHECK_NAME> --status failed
+dagctl get asset-check-executions <KEY> <CHECK_NAME> --status failed,execution-failed
 ```
 
 ### Schema Management

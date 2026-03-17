@@ -1235,6 +1235,7 @@ async fn test_get_asset_check_executions_success() {
         "my_asset".to_string(),
         "freshness_check",
         Some(25),
+        vec![],
         &None,
     )
     .await;

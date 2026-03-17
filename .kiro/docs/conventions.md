@@ -59,11 +59,15 @@ pub async fn my_command(token: &str, api_url: &str, args...) -> Result<()> {
 - Top-level commands: `Get`, `Events`, `Logs`, `Schema`, `Debug`, `Completion`, `SelfCmd`
 - `Get` has nested subcommands via `GetResource` enum (`Runs`, `Run`, `RunEvents`, `RunLogs`, `CodeLocations`, `CodeLocation`, `Jobs`, `Job`, `Assets`, `Asset`, `AssetEvent`, `AssetEvents`, `AssetPartitions`, `AssetChecks`, `AssetCheck`, `AssetCheckExecutions`)
 - Global args (`--token`, `--organization`, `--deployment`) go on the top-level `Cli` struct with `#[arg(global = true)]`
-- Filter options use strongly-typed `#[derive(Clone, Debug, clap::ValueEnum)]` enums (e.g., `RunStatusFilter`, `AssetHealthStatusFilter`) with `#[arg(value_delimiter = ',')]` for comma-separated input
-- Filters are pushed server-side where possible (e.g., `RunsFilter` input, `eventTypeSelectors`, `AssetGroupSelector`)
+- Filter options use strongly-typed `#[derive(Clone, Debug, clap::ValueEnum)]` enums (e.g., `RunStatusFilter`, `AssetHealthStatusFilter`, `CheckExecutionStatusFilter`) with `#[arg(value_delimiter = ',')]` for comma-separated input
+- Filters are pushed server-side where possible (e.g., `RunsFilter` input, `eventTypeSelectors`, `AssetGroupSelector`); when the API lacks a filter parameter, client-side filtering with cursor-based pagination is used (e.g., `AssetCheckExecutions --status`)
 - Auth resolution and API URL construction happen in `run()` before dispatching to handlers
 - Async commands run inside `tokio::runtime::Runtime::new()?.block_on()`
 - `Completion` and `SelfCmd::Update` are handled before auth resolution (they don't need credentials)
+
+### SKILL.md Maintenance
+
+`src/commands/skill.rs` contains a hardcoded Kiro SKILL.md that documents the full public CLI surface. This content must be updated whenever commands, flags, or usage patterns change. Run `dagctl self skill` to preview the current output.
 
 ## Testing Patterns
 
