@@ -232,6 +232,15 @@ struct RunDetail {
     end_time: Option<f64>,
     #[cynic(rename = "runConfigYaml")]
     run_config_yaml: String,
+    tags: Vec<PipelineTag>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct PipelineTag {
+    key: String,
+    value: String,
 }
 
 #[derive(cynic::InlineFragments, Debug)]
@@ -308,6 +317,10 @@ pub async fn get_run(
                     run.start_time,
                     run.end_time,
                     &run.run_config_yaml,
+                    &run.tags
+                        .iter()
+                        .map(|t| format!("{}={}", t.key, t.value))
+                        .collect::<Vec<_>>(),
                 );
                 Ok(())
             }

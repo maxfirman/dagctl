@@ -72,6 +72,7 @@ pub fn format_run_detail(
     start: Option<f64>,
     end: Option<f64>,
     config_yaml: &str,
+    tags: &[String],
 ) {
     let mut table = new_table();
     table.set_header(vec![
@@ -86,6 +87,9 @@ pub fn format_run_detail(
     ]);
     table.add_row(vec![Cell::new("Start"), Cell::new(format_timestamp(start))]);
     table.add_row(vec![Cell::new("End"), Cell::new(format_timestamp(end))]);
+    if !tags.is_empty() {
+        table.add_row(vec![Cell::new("Tags"), Cell::new(tags.join("\n"))]);
+    }
     table.add_row(vec![Cell::new("Config"), Cell::new(config_yaml)]);
     println!("{table}");
 }
