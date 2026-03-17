@@ -1553,15 +1553,9 @@ pub async fn get_asset_event(
 ) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
-    // Query with a 1ms window around the target timestamp
+    // Timestamp is already in milliseconds, matching get asset-events output
     let ts_millis: i64 = timestamp
-        .parse::<f64>()
-        .map(|t| (t * 1000.0) as i64)
-        .or_else(|_| {
-            timestamp
-                .parse::<i64>()
-                .map(|t| if t > 1_000_000_000_000 { t } else { t * 1000 })
-        })
+        .parse::<i64>()
         .map_err(|_| anyhow::anyhow!("Invalid timestamp: {}", timestamp))?;
 
     let operation = AssetEventDetailQuery::build(AssetEventDetailQueryVariables {
