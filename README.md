@@ -125,7 +125,26 @@ dagctl get runs
 # List runs with a limit
 dagctl get runs --limit 10
 
-# Get details for a specific run
+# Filter by status (comma-separated: queued, not-started, managed, starting, started, success, failure, canceling, canceled)
+dagctl get runs --status failure
+dagctl get runs --status failure,canceled
+
+# Filter by job name
+dagctl get runs --job my_job
+
+# Filter by who launched the run
+dagctl get runs --launched-by user@example.com
+
+# Filter by partition
+dagctl get runs --partition 2026-03-17
+
+# Filter by arbitrary tags (key=value, comma-separated)
+dagctl get runs --tags env=prod,team=data
+
+# Combine filters
+dagctl get runs --status failure --job my_job --limit 10
+
+# Get details for a specific run (includes tags)
 dagctl get run <RUN_ID>
 
 # Get all events for a run
@@ -161,7 +180,7 @@ dagctl get job <NAME> --code-location <LOC>
 ### Assets
 
 ```bash
-# List all assets
+# List all assets (includes health status)
 dagctl get assets
 
 # Filter assets by group
@@ -170,9 +189,37 @@ dagctl get assets --group <GROUP>
 # Filter assets by code location
 dagctl get assets --code-location <NAME>
 
-# Get details for a specific asset (slash-separated key)
+# Filter by health status (comma-separated: healthy, warning, degraded, unknown, not-applicable)
+dagctl get assets --health degraded,warning
+
+# Get details for a specific asset (slash-separated key, includes health info)
 dagctl get asset <KEY>
 dagctl get asset my_prefix/my_asset
+
+# Get event history for an asset (materializations, observations, failures)
+dagctl get asset-events <KEY>
+dagctl get asset-events <KEY> --limit 20
+
+# Filter events by type, status, or partition
+dagctl get asset-events <KEY> --type materialization
+dagctl get asset-events <KEY> --status failure
+dagctl get asset-events <KEY> --partition 2026-03-17
+
+# Get detail for a specific event (use timestamp from asset-events output)
+dagctl get asset-event <KEY> <TIMESTAMP>
+
+# Get partition status summary for an asset
+dagctl get asset-partitions <KEY>
+
+# List asset checks with latest execution status
+dagctl get asset-checks <KEY>
+
+# Get details for a specific asset check
+dagctl get asset-check <KEY> <CHECK_NAME>
+
+# List historic executions for an asset check
+dagctl get asset-check-executions <KEY> <CHECK_NAME>
+dagctl get asset-check-executions <KEY> <CHECK_NAME> --limit 20
 ```
 
 ### Schema Management
