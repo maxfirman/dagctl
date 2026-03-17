@@ -235,19 +235,13 @@ pub fn format_job_detail(
 
 pub fn format_assets_table(assets: &[(String, String, String, String, String)]) {
     let mut table = new_table();
-    table.set_header(vec![
-        "ASSET KEY",
-        "GROUP",
-        "CODE LOCATION",
-        "COMPUTE KIND",
-        "INFO",
-    ]);
-    for (key, group, location, compute_kind, info) in assets {
+    table.set_header(vec!["ASSET KEY", "GROUP", "CODE LOCATION", "KIND", "INFO"]);
+    for (key, group, location, kinds, info) in assets {
         table.add_row(vec![
             Cell::new(key),
             Cell::new(group),
             Cell::new(location),
-            Cell::new(compute_kind),
+            Cell::new(kinds),
             Cell::new(info),
         ]);
     }
@@ -261,7 +255,7 @@ pub struct AssetDetail<'a> {
     pub group: &'a str,
     pub code_location: &'a str,
     pub description: &'a str,
-    pub compute_kind: &'a str,
+    pub kinds: &'a [String],
     pub partitioned: bool,
     pub dependencies: &'a [String],
     pub dependents: &'a [String],
@@ -287,11 +281,8 @@ pub fn format_asset_detail(detail: &AssetDetail) {
             Cell::new(detail.description),
         ]);
     }
-    if !detail.compute_kind.is_empty() {
-        table.add_row(vec![
-            Cell::new("Compute Kind"),
-            Cell::new(detail.compute_kind),
-        ]);
+    if !detail.kinds.is_empty() {
+        table.add_row(vec![Cell::new("Kinds"), Cell::new(detail.kinds.join(", "))]);
     }
     table.add_row(vec![
         Cell::new("Partitioned"),

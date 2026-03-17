@@ -45,8 +45,7 @@ struct AssetNodeSummary {
     asset_key: AssetKey,
     #[cynic(rename = "groupName")]
     group_name: String,
-    #[cynic(rename = "computeKind")]
-    compute_kind: Option<String>,
+    kinds: Vec<String>,
     #[cynic(rename = "isPartitioned")]
     is_partitioned: bool,
     repository: AssetRepository,
@@ -71,7 +70,7 @@ struct AssetListEntry {
     key: String,
     group: String,
     code_location: String,
-    compute_kind: Option<String>,
+    kinds: Vec<String>,
     partitioned: bool,
 }
 
@@ -118,7 +117,7 @@ pub async fn list_assets(
             key: format_asset_key(&n.asset_key.path),
             group: n.group_name,
             code_location: n.repository.location.name,
-            compute_kind: n.compute_kind,
+            kinds: n.kinds,
             partitioned: n.is_partitioned,
         })
         .collect();
@@ -133,7 +132,7 @@ pub async fn list_assets(
                         e.key.clone(),
                         e.group.clone(),
                         e.code_location.clone(),
-                        e.compute_kind.clone().unwrap_or_default(),
+                        e.kinds.join(", "),
                         if e.partitioned {
                             "partitioned".into()
                         } else {
@@ -196,8 +195,7 @@ struct AssetNodeDetail {
     #[cynic(rename = "groupName")]
     group_name: String,
     description: Option<String>,
-    #[cynic(rename = "computeKind")]
-    compute_kind: Option<String>,
+    kinds: Vec<String>,
     #[cynic(rename = "isPartitioned")]
     is_partitioned: bool,
     #[cynic(rename = "jobNames")]
@@ -290,7 +288,7 @@ pub async fn get_asset(
                     group: &node.group_name,
                     code_location: &node.repository.location.name,
                     description: node.description.as_deref().unwrap_or(""),
-                    compute_kind: node.compute_kind.as_deref().unwrap_or(""),
+                    kinds: &node.kinds,
                     partitioned: node.is_partitioned,
                     dependencies: &deps,
                     dependents: &dependents,

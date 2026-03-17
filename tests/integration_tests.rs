@@ -670,7 +670,7 @@ async fn test_list_assets_success() {
                             "id": "a1",
                             "assetKey": {"path": ["my_prefix", "my_asset"]},
                             "groupName": "default",
-                            "computeKind": "python",
+                            "kinds": ["python"],
                             "isPartitioned": false,
                             "repository": {
                                 "id": "r1",
@@ -714,7 +714,7 @@ async fn test_get_asset_success() {
                         "assetKey": {"path": ["my_asset"]},
                         "groupName": "default",
                         "description": "A test asset",
-                        "computeKind": "python",
+                        "kinds": ["python"],
                         "isPartitioned": false,
                         "jobNames": ["my_job"],
                         "dependencyKeys": [{"path": ["upstream"]}],
