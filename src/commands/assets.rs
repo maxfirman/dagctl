@@ -1133,6 +1133,7 @@ struct AssetEventsQueryVariables {
     limit: i32,
     #[cynic(rename = "eventTypeSelectors")]
     event_type_selectors: Vec<AssetEventHistoryEventTypeSelector>,
+    partitions: Option<Vec<String>>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -1170,7 +1171,7 @@ enum AssetOrError {
 )]
 #[cynic(schema_module = "crate::schema::schema")]
 struct AssetWithEvents {
-    #[arguments(limit: $limit, eventTypeSelectors: $event_type_selectors)]
+    #[arguments(limit: $limit, eventTypeSelectors: $event_type_selectors, partitions: $partitions)]
     #[cynic(rename = "assetEventHistory")]
     asset_event_history: AssetResultEventHistoryConnection,
 }
@@ -1226,25 +1227,63 @@ struct AssetFailedToMaterializeEvent {
     partition: Option<String>,
 }
 
+#[derive(Clone, Debug, clap::ValueEnum)]
+pub enum AssetEventTypeFilter {
+    Materialization,
+    Observation,
+    #[value(name = "failed-to-materialize")]
+    FailedToMaterialize,
+}
+
+#[derive(Clone, Debug, clap::ValueEnum)]
+pub enum AssetEventStatusFilter {
+    Success,
+    Failure,
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn get_asset_events(
     token: &str,
     api_url: &str,
     key: String,
     limit: Option<i32>,
+    event_type: Vec<AssetEventTypeFilter>,
+    status: Vec<AssetEventStatusFilter>,
+    partition: Option<String>,
     fmt: &Option<OutputFormat>,
 ) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
+
+    let selectors = if event_type.is_empty() {
+        vec![
+            AssetEventHistoryEventTypeSelector::Materialization,
+            AssetEventHistoryEventTypeSelector::Observation,
+            AssetEventHistoryEventTypeSelector::FailedToMaterialize,
+        ]
+    } else {
+        event_type
+            .iter()
+            .map(|t| match t {
+                AssetEventTypeFilter::Materialization => {
+                    AssetEventHistoryEventTypeSelector::Materialization
+                }
+                AssetEventTypeFilter::Observation => {
+                    AssetEventHistoryEventTypeSelector::Observation
+                }
+                AssetEventTypeFilter::FailedToMaterialize => {
+                    AssetEventHistoryEventTypeSelector::FailedToMaterialize
+                }
+            })
+            .collect()
+    };
 
     let operation = AssetEventsQuery::build(AssetEventsQueryVariables {
         asset_key: AssetKeyInput {
             path: parse_asset_key(&key),
         },
         limit: limit.unwrap_or(25),
-        event_type_selectors: vec![
-            AssetEventHistoryEventTypeSelector::Materialization,
-            AssetEventHistoryEventTypeSelector::Observation,
-            AssetEventHistoryEventTypeSelector::FailedToMaterialize,
-        ],
+        event_type_selectors: selectors,
+        partitions: partition.map(|p| vec![p]),
     });
 
     let response = reqwest::Client::new()
@@ -1263,7 +1302,21 @@ pub async fn get_asset_events(
 
     match data.asset_or_error {
         AssetOrError::Asset(asset) => {
-            let events = asset.asset_event_history.results;
+            let events: Vec<_> = asset
+                .asset_event_history
+                .results
+                .into_iter()
+                .filter(|e| {
+                    if status.is_empty() {
+                        return true;
+                    }
+                    let is_failure = matches!(e, AssetResultEventType::FailedToMaterializeEvent(_));
+                    status.iter().any(|s| match s {
+                        AssetEventStatusFilter::Success => !is_failure,
+                        AssetEventStatusFilter::Failure => is_failure,
+                    })
+                })
+                .collect();
             match fmt {
                 Some(f) => output::render(&events, f),
                 None => {

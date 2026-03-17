@@ -103,6 +103,15 @@ enum GetResource {
         key: String,
         #[arg(long)]
         limit: Option<i32>,
+        /// Filter by event type (comma-separated: materialization,observation,failed-to-materialize)
+        #[arg(long = "type", value_delimiter = ',')]
+        event_type: Vec<commands::assets::AssetEventTypeFilter>,
+        /// Filter by status (comma-separated: success,failure)
+        #[arg(long, value_delimiter = ',')]
+        status: Vec<commands::assets::AssetEventStatusFilter>,
+        /// Filter by partition
+        #[arg(long)]
+        partition: Option<String>,
     },
     /// Get partition status summary for an asset
     #[command(name = "asset-partitions")]
@@ -212,11 +221,18 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             }),
             GetResource::Asset { key } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::assets::get_asset(&token, &api_url, key, &fmt).await }),
-            GetResource::AssetEvents { key, limit } => {
-                tokio::runtime::Runtime::new()?.block_on(async {
-                    commands::assets::get_asset_events(&token, &api_url, key, limit, &fmt).await
-                })
-            }
+            GetResource::AssetEvents {
+                key,
+                limit,
+                event_type,
+                status,
+                partition,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::assets::get_asset_events(
+                    &token, &api_url, key, limit, event_type, status, partition, &fmt,
+                )
+                .await
+            }),
             GetResource::AssetPartitions { key } => {
                 tokio::runtime::Runtime::new()?.block_on(async {
                     commands::assets::get_asset_partitions(&token, &api_url, key, &fmt).await

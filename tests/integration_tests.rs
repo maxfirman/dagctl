@@ -901,6 +901,9 @@ async fn test_get_asset_events_success() {
         &api_url,
         "my_asset".to_string(),
         Some(25),
+        vec![],
+        vec![],
+        None,
         &None,
     )
     .await;
@@ -936,6 +939,9 @@ async fn test_get_asset_events_not_found() {
         "test-token",
         &api_url,
         "nonexistent".to_string(),
+        None,
+        vec![],
+        vec![],
         None,
         &None,
     )
