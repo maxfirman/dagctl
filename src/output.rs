@@ -428,6 +428,76 @@ pub fn format_asset_events_table(events: &[(String, String, String, String, Stri
     println!("{table}");
 }
 
+// --- get asset-event (detail) ---
+
+pub struct AssetEventDetail<'a> {
+    pub event_type: &'a str,
+    pub status: &'a str,
+    pub run_id: &'a str,
+    pub timestamp: &'a str,
+    pub partition: &'a str,
+    pub step_key: &'a str,
+    pub description: &'a str,
+    pub label: &'a str,
+    pub metadata: &'a [(String, String)],
+    pub tags: &'a [String],
+    pub failure_reason: &'a str,
+}
+
+pub fn format_asset_event_detail(detail: &AssetEventDetail) {
+    let mut table = new_table();
+    table.set_header(vec![
+        Cell::new("Field").set_alignment(CellAlignment::Right),
+        Cell::new("Value"),
+    ]);
+    table.add_row(vec![Cell::new("Type"), Cell::new(detail.event_type)]);
+    table.add_row(vec![
+        Cell::new("Status"),
+        Cell::new(detail.status).fg(status_color(detail.status)),
+    ]);
+    table.add_row(vec![Cell::new("Run ID"), Cell::new(detail.run_id)]);
+    table.add_row(vec![Cell::new("Timestamp"), Cell::new(detail.timestamp)]);
+    if !detail.partition.is_empty() {
+        table.add_row(vec![Cell::new("Partition"), Cell::new(detail.partition)]);
+    }
+    if !detail.step_key.is_empty() {
+        table.add_row(vec![Cell::new("Step Key"), Cell::new(detail.step_key)]);
+    }
+    if !detail.label.is_empty() {
+        table.add_row(vec![Cell::new("Label"), Cell::new(detail.label)]);
+    }
+    if !detail.description.is_empty() {
+        table.add_row(vec![
+            Cell::new("Description"),
+            Cell::new(detail.description),
+        ]);
+    }
+    if !detail.failure_reason.is_empty() {
+        table.add_row(vec![
+            Cell::new("Failure Reason"),
+            Cell::new(detail.failure_reason),
+        ]);
+    }
+    if !detail.tags.is_empty() {
+        table.add_row(vec![Cell::new("Tags"), Cell::new(detail.tags.join("\n"))]);
+    }
+    if !detail.metadata.is_empty() {
+        let lines: Vec<String> = detail
+            .metadata
+            .iter()
+            .map(|(k, v)| {
+                if v.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{k}: {v}")
+                }
+            })
+            .collect();
+        table.add_row(vec![Cell::new("Metadata"), Cell::new(lines.join("\n"))]);
+    }
+    println!("{table}");
+}
+
 // --- get asset-partitions ---
 
 pub fn format_asset_partitions_table(

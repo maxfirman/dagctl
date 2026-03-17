@@ -1399,6 +1399,305 @@ pub async fn get_asset_events(
     }
 }
 
+// --- Asset event detail ---
+
+#[derive(cynic::QueryVariables, Debug)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetEventDetailQueryVariables {
+    #[cynic(rename = "assetKey")]
+    asset_key: AssetKeyInput,
+    #[cynic(rename = "afterTimestampMillis")]
+    after_timestamp_millis: Option<String>,
+    #[cynic(rename = "beforeTimestampMillis")]
+    before_timestamp_millis: Option<String>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "AssetEventDetailQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetEventDetailQuery {
+    #[arguments(assetKey: $asset_key)]
+    #[cynic(rename = "assetOrError")]
+    asset_or_error: AssetOrErrorDetail,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "AssetOrError",
+    variables = "AssetEventDetailQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetOrErrorDetail {
+    Asset(AssetWithEventDetail),
+    AssetNotFoundError(AssetNotFoundError),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "Asset",
+    variables = "AssetEventDetailQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetWithEventDetail {
+    #[arguments(limit: 1, eventTypeSelectors: ["MATERIALIZATION", "OBSERVATION", "FAILED_TO_MATERIALIZE"], afterTimestampMillis: $after_timestamp_millis, beforeTimestampMillis: $before_timestamp_millis)]
+    #[cynic(rename = "assetEventHistory")]
+    asset_event_history: AssetEventDetailConnection,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetResultEventHistoryConnection")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetEventDetailConnection {
+    results: Vec<AssetEventDetailType>,
+}
+
+#[derive(cynic::InlineFragments, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetResultEventType")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetEventDetailType {
+    MaterializationEvent(MaterializationEventDetail),
+    ObservationEvent(ObservationEventDetail),
+    FailedToMaterializeEvent(FailedToMaterializeEventDetail),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "MaterializationEvent")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct MaterializationEventDetail {
+    #[cynic(rename = "runId")]
+    run_id: String,
+    timestamp: String,
+    message: String,
+    partition: Option<String>,
+    #[cynic(rename = "stepKey")]
+    step_key: Option<String>,
+    description: Option<String>,
+    label: Option<String>,
+    #[cynic(rename = "metadataEntries")]
+    metadata_entries: Vec<MetadataEntryFragment>,
+    tags: Vec<EventTag>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "ObservationEvent")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct ObservationEventDetail {
+    #[cynic(rename = "runId")]
+    run_id: String,
+    timestamp: String,
+    message: String,
+    partition: Option<String>,
+    #[cynic(rename = "stepKey")]
+    step_key: Option<String>,
+    description: Option<String>,
+    label: Option<String>,
+    #[cynic(rename = "metadataEntries")]
+    metadata_entries: Vec<MetadataEntryFragment>,
+    tags: Vec<EventTag>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "FailedToMaterializeEvent")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct FailedToMaterializeEventDetail {
+    #[cynic(rename = "runId")]
+    run_id: String,
+    timestamp: String,
+    message: String,
+    partition: Option<String>,
+    #[cynic(rename = "stepKey")]
+    step_key: Option<String>,
+    description: Option<String>,
+    label: Option<String>,
+    #[cynic(rename = "metadataEntries")]
+    metadata_entries: Vec<MetadataEntryFragment>,
+    tags: Vec<EventTag>,
+    #[cynic(rename = "materializationFailureReason")]
+    materialization_failure_reason: AssetMaterializationFailureReason,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct EventTag {
+    key: String,
+    value: String,
+}
+
+#[derive(cynic::Enum, Clone, Copy, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetMaterializationFailureReason")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetMaterializationFailureReason {
+    FailedToMaterialize,
+    UpstreamFailedToMaterialize,
+    RunTerminated,
+    Unknown,
+}
+
+pub async fn get_asset_event(
+    token: &str,
+    api_url: &str,
+    key: String,
+    timestamp: &str,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
+    use cynic::{QueryBuilder, http::ReqwestExt};
+
+    // Query with a 1ms window around the target timestamp
+    let ts_millis: i64 = timestamp
+        .parse::<f64>()
+        .map(|t| (t * 1000.0) as i64)
+        .or_else(|_| {
+            timestamp
+                .parse::<i64>()
+                .map(|t| if t > 1_000_000_000_000 { t } else { t * 1000 })
+        })
+        .map_err(|_| anyhow::anyhow!("Invalid timestamp: {}", timestamp))?;
+
+    let operation = AssetEventDetailQuery::build(AssetEventDetailQueryVariables {
+        asset_key: AssetKeyInput {
+            path: parse_asset_key(&key),
+        },
+        after_timestamp_millis: Some((ts_millis - 1).to_string()),
+        before_timestamp_millis: Some((ts_millis + 1).to_string()),
+    });
+
+    let response = reqwest::Client::new()
+        .post(api_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .run_graphql(operation)
+        .await?;
+
+    if let Some(errors) = response.errors {
+        anyhow::bail!("GraphQL errors: {:?}", errors);
+    }
+
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
+    match data.asset_or_error {
+        AssetOrErrorDetail::Asset(asset) => {
+            let event = asset
+                .asset_event_history
+                .results
+                .into_iter()
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("No event found at timestamp {}", timestamp))?;
+            match fmt {
+                Some(f) => output::render(&event, f),
+                None => {
+                    match &event {
+                        AssetEventDetailType::MaterializationEvent(e) => {
+                            format_event_detail(
+                                "Materialization",
+                                "Success",
+                                &e.run_id,
+                                &e.timestamp,
+                                e.partition.as_deref(),
+                                e.step_key.as_deref(),
+                                e.description.as_deref(),
+                                e.label.as_deref(),
+                                &e.metadata_entries,
+                                &e.tags,
+                                None,
+                            );
+                        }
+                        AssetEventDetailType::ObservationEvent(e) => {
+                            format_event_detail(
+                                "Observation",
+                                "Success",
+                                &e.run_id,
+                                &e.timestamp,
+                                e.partition.as_deref(),
+                                e.step_key.as_deref(),
+                                e.description.as_deref(),
+                                e.label.as_deref(),
+                                &e.metadata_entries,
+                                &e.tags,
+                                None,
+                            );
+                        }
+                        AssetEventDetailType::FailedToMaterializeEvent(e) => {
+                            format_event_detail(
+                                "FailedToMaterialize",
+                                "Failure",
+                                &e.run_id,
+                                &e.timestamp,
+                                e.partition.as_deref(),
+                                e.step_key.as_deref(),
+                                e.description.as_deref(),
+                                e.label.as_deref(),
+                                &e.metadata_entries,
+                                &e.tags,
+                                Some(&format!("{:?}", e.materialization_failure_reason)),
+                            );
+                        }
+                        AssetEventDetailType::Other => {}
+                    }
+                    Ok(())
+                }
+            }
+        }
+        AssetOrErrorDetail::AssetNotFoundError(err) => {
+            anyhow::bail!("Asset not found: {}", err.message)
+        }
+        AssetOrErrorDetail::Other => anyhow::bail!("Unexpected response type from API"),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn format_event_detail(
+    event_type: &str,
+    status: &str,
+    run_id: &str,
+    timestamp: &str,
+    partition: Option<&str>,
+    step_key: Option<&str>,
+    description: Option<&str>,
+    label: Option<&str>,
+    metadata: &[MetadataEntryFragment],
+    tags: &[EventTag],
+    failure_reason: Option<&str>,
+) {
+    output::format_asset_event_detail(&output::AssetEventDetail {
+        event_type,
+        status,
+        run_id,
+        timestamp,
+        partition: partition.unwrap_or(""),
+        step_key: step_key.unwrap_or(""),
+        description: description.unwrap_or(""),
+        label: label.unwrap_or(""),
+        metadata: &metadata
+            .iter()
+            .filter(|m| !m.label().is_empty())
+            .map(|m| (m.label().to_string(), m.value()))
+            .collect::<Vec<_>>(),
+        tags: &tags
+            .iter()
+            .map(|t| {
+                if t.value.is_empty() {
+                    t.key.clone()
+                } else {
+                    format!("{}={}", t.key, t.value)
+                }
+            })
+            .collect::<Vec<_>>(),
+        failure_reason: failure_reason.unwrap_or(""),
+    });
+}
+
 // --- Asset partitions ---
 
 #[derive(cynic::QueryFragment, Debug)]

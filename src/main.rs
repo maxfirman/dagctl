@@ -97,6 +97,9 @@ enum GetResource {
     },
     /// Show details of a specific asset (use slash-separated key, e.g. my_prefix/my_asset)
     Asset { key: String },
+    /// Show details of a specific asset event by timestamp
+    #[command(name = "asset-event")]
+    AssetEvent { key: String, timestamp: String },
     /// Get event history for an asset (materializations, observations, failures)
     #[command(name = "asset-events")]
     AssetEvents {
@@ -221,6 +224,11 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             }),
             GetResource::Asset { key } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::assets::get_asset(&token, &api_url, key, &fmt).await }),
+            GetResource::AssetEvent { key, timestamp } => {
+                tokio::runtime::Runtime::new()?.block_on(async {
+                    commands::assets::get_asset_event(&token, &api_url, key, &timestamp, &fmt).await
+                })
+            }
             GetResource::AssetEvents {
                 key,
                 limit,
