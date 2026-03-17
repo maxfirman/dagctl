@@ -321,6 +321,8 @@ pub async fn list_assets(
                 all_nodes.extend(data.asset_nodes);
             }
         }
+    } else if group.is_some() {
+        // Group was specified but not found — return empty
     } else {
         let resp = client
             .post(api_url)
