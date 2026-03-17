@@ -814,3 +814,394 @@ async fn test_get_asset_not_found() {
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("not found"));
 }
+
+#[tokio::test]
+async fn test_get_asset_events_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetOrError": {
+                        "__typename": "Asset",
+                        "id": "a1",
+                        "key": {"path": ["my_asset"]},
+                        "assetEventHistory": {
+                            "results": [
+                                {
+                                    "__typename": "MaterializationEvent",
+                                    "runId": "run-1",
+                                    "timestamp": "1710000000",
+                                    "message": "Materialized asset",
+                                    "partition": "2024-01-01"
+                                },
+                                {
+                                    "__typename": "ObservationEvent",
+                                    "runId": "run-2",
+                                    "timestamp": "1710000100",
+                                    "message": "Observed asset",
+                                    "partition": null
+                                },
+                                {
+                                    "__typename": "FailedToMaterializeEvent",
+                                    "runId": "run-3",
+                                    "timestamp": "1710000200",
+                                    "message": "Failed to materialize",
+                                    "partition": null
+                                }
+                            ],
+                            "cursor": "abc"
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_events(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        Some(25),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_events_not_found() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetOrError": {
+                        "__typename": "AssetNotFoundError",
+                        "message": "Asset not found"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_events(
+        "test-token",
+        &api_url,
+        "nonexistent".to_string(),
+        None,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not found"));
+}
+
+#[tokio::test]
+async fn test_get_asset_partitions_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodeOrError": {
+                        "__typename": "AssetNode",
+                        "id": "a1",
+                        "isPartitioned": true,
+                        "partitionStats": {
+                            "numPartitions": 100,
+                            "numMaterialized": 80,
+                            "numFailed": 5,
+                            "numMaterializing": 2
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_partitions(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_partitions_not_partitioned() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodeOrError": {
+                        "__typename": "AssetNode",
+                        "id": "a1",
+                        "isPartitioned": false,
+                        "partitionStats": null
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_partitions(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not partitioned"));
+}
+
+#[tokio::test]
+async fn test_get_asset_checks_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodeOrError": {
+                        "__typename": "AssetNode",
+                        "id": "a1",
+                        "assetChecksOrError": {
+                            "__typename": "AssetChecks",
+                            "checks": [
+                                {
+                                    "name": "freshness_check",
+                                    "description": "Checks data freshness",
+                                    "blocking": true,
+                                    "executionForLatestMaterialization": {
+                                        "id": "e1",
+                                        "status": "SUCCEEDED",
+                                        "runId": "run-1",
+                                        "timestamp": 1710000000.0
+                                    }
+                                },
+                                {
+                                    "name": "row_count_check",
+                                    "description": null,
+                                    "blocking": false,
+                                    "executionForLatestMaterialization": null
+                                }
+                            ]
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_checks(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_check_detail_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodeOrError": {
+                        "__typename": "AssetNode",
+                        "id": "a1",
+                        "assetCheckOrError": {
+                            "__typename": "AssetCheck",
+                            "name": "freshness_check",
+                            "description": "Checks data freshness",
+                            "blocking": true,
+                            "jobNames": ["my_job"],
+                            "canExecuteIndividually": "CAN_EXECUTE",
+                            "automationCondition": null,
+                            "executionForLatestMaterialization": {
+                                "id": "e1",
+                                "status": "SUCCEEDED",
+                                "runId": "run-1",
+                                "timestamp": 1710000000.0,
+                                "evaluation": {
+                                    "severity": "ERROR",
+                                    "success": true,
+                                    "description": "Check passed"
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_check(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        "freshness_check",
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_check_not_found() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodeOrError": {
+                        "__typename": "AssetNode",
+                        "id": "a1",
+                        "assetCheckOrError": {
+                            "__typename": "AssetCheckNotFoundError",
+                            "message": "Check not found"
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_check(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        "nonexistent",
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not found"));
+}
+
+#[tokio::test]
+async fn test_get_asset_check_executions_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetCheckExecutions": [
+                        {
+                            "id": "e1",
+                            "status": "SUCCEEDED",
+                            "runId": "run-1",
+                            "timestamp": 1710000000.0,
+                            "partition": null,
+                            "stepKey": null,
+                            "evaluation": {
+                                "severity": "ERROR"
+                            }
+                        },
+                        {
+                            "id": "e2",
+                            "status": "FAILED",
+                            "runId": "run-2",
+                            "timestamp": 1709999000.0,
+                            "partition": "2024-01-01",
+                            "stepKey": null,
+                            "evaluation": {
+                                "severity": "WARN"
+                            }
+                        }
+                    ]
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_check_executions(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        "freshness_check",
+        Some(25),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}

@@ -28,10 +28,10 @@ pub fn format_timestamp(epoch: Option<f64>) -> String {
 
 fn status_color(status: &str) -> Color {
     match status {
-        "Success" => Color::Green,
-        "Failure" => Color::Red,
-        "Canceled" | "Canceling" => Color::Yellow,
-        "Started" | "Starting" => Color::Cyan,
+        "Success" | "SUCCEEDED" => Color::Green,
+        "Failure" | "FAILED" | "EXECUTION_FAILED" => Color::Red,
+        "Canceled" | "Canceling" | "SKIPPED" => Color::Yellow,
+        "Started" | "Starting" | "IN_PROGRESS" => Color::Cyan,
         "Queued" | "NotStarted" | "Managed" => Color::White,
         _ => Color::White,
     }
@@ -361,6 +361,171 @@ pub fn format_asset_detail(detail: &AssetDetail) {
         table.add_row(vec![
             Cell::new("Schedules"),
             Cell::new(detail.schedules.join("\n")),
+        ]);
+    }
+    println!("{table}");
+}
+
+// --- get asset-events ---
+
+pub fn format_asset_events_table(events: &[(String, String, String, String, String)]) {
+    let mut table = new_table();
+    table.set_header(vec!["TIMESTAMP", "TYPE", "RUN ID", "PARTITION", "MESSAGE"]);
+    for (ts, event_type, run_id, partition, message) in events {
+        let msg = if message.len() > 80 {
+            format!("{}…", &message[..79])
+        } else {
+            message.clone()
+        };
+        table.add_row(vec![
+            Cell::new(ts),
+            Cell::new(event_type),
+            Cell::new(run_id),
+            Cell::new(partition),
+            Cell::new(msg),
+        ]);
+    }
+    println!("{table}");
+}
+
+// --- get asset-partitions ---
+
+pub fn format_asset_partitions_table(
+    total: i32,
+    materialized: i32,
+    failed: i32,
+    materializing: i32,
+) {
+    let mut table = new_table();
+    table.set_header(vec![
+        Cell::new("Field").set_alignment(CellAlignment::Right),
+        Cell::new("Value"),
+    ]);
+    table.add_row(vec![Cell::new("Total"), Cell::new(total)]);
+    table.add_row(vec![Cell::new("Materialized"), Cell::new(materialized)]);
+    table.add_row(vec![Cell::new("Failed"), Cell::new(failed)]);
+    table.add_row(vec![Cell::new("Materializing"), Cell::new(materializing)]);
+    println!("{table}");
+}
+
+// --- get asset-checks ---
+
+pub fn format_asset_checks_table(checks: &[(String, String, String, String, String, String)]) {
+    let mut table = new_table();
+    table.set_header(vec![
+        "NAME",
+        "BLOCKING",
+        "LATEST STATUS",
+        "LATEST RUN ID",
+        "LATEST TIMESTAMP",
+        "DESCRIPTION",
+    ]);
+    for (name, blocking, status, run_id, ts, description) in checks {
+        table.add_row(vec![
+            Cell::new(name),
+            Cell::new(blocking),
+            Cell::new(status).fg(status_color(status)),
+            Cell::new(run_id),
+            Cell::new(ts),
+            Cell::new(description),
+        ]);
+    }
+    println!("{table}");
+}
+
+// --- get asset-check (detail) ---
+
+pub struct AssetCheckDetail<'a> {
+    pub name: &'a str,
+    pub description: &'a str,
+    pub blocking: bool,
+    pub jobs: &'a [String],
+    pub can_execute_individually: &'a str,
+    pub automation_condition: &'a str,
+    pub latest_status: &'a str,
+    pub latest_run_id: &'a str,
+    pub latest_timestamp: &'a str,
+    pub latest_severity: &'a str,
+    pub latest_success: &'a str,
+}
+
+pub fn format_asset_check_detail(detail: &AssetCheckDetail) {
+    let mut table = new_table();
+    table.set_header(vec![
+        Cell::new("Field").set_alignment(CellAlignment::Right),
+        Cell::new("Value"),
+    ]);
+    table.add_row(vec![Cell::new("Name"), Cell::new(detail.name)]);
+    if !detail.description.is_empty() {
+        table.add_row(vec![
+            Cell::new("Description"),
+            Cell::new(detail.description),
+        ]);
+    }
+    table.add_row(vec![
+        Cell::new("Blocking"),
+        Cell::new(if detail.blocking { "Yes" } else { "No" }),
+    ]);
+    if !detail.jobs.is_empty() {
+        table.add_row(vec![Cell::new("Jobs"), Cell::new(detail.jobs.join(", "))]);
+    }
+    table.add_row(vec![
+        Cell::new("Can Execute Individually"),
+        Cell::new(detail.can_execute_individually),
+    ]);
+    if !detail.automation_condition.is_empty() {
+        table.add_row(vec![
+            Cell::new("Automation"),
+            Cell::new(detail.automation_condition),
+        ]);
+    }
+    if !detail.latest_status.is_empty() {
+        table.add_row(vec![
+            Cell::new("Latest Status"),
+            Cell::new(detail.latest_status).fg(status_color(detail.latest_status)),
+        ]);
+        table.add_row(vec![
+            Cell::new("Latest Run ID"),
+            Cell::new(detail.latest_run_id),
+        ]);
+        table.add_row(vec![
+            Cell::new("Latest Timestamp"),
+            Cell::new(detail.latest_timestamp),
+        ]);
+        if !detail.latest_severity.is_empty() {
+            table.add_row(vec![
+                Cell::new("Latest Severity"),
+                Cell::new(detail.latest_severity),
+            ]);
+            table.add_row(vec![
+                Cell::new("Latest Success"),
+                Cell::new(detail.latest_success),
+            ]);
+        }
+    }
+    println!("{table}");
+}
+
+// --- get asset-check-executions ---
+
+pub fn format_asset_check_executions_table(
+    executions: &[(String, String, String, String, String)],
+) {
+    let mut table = new_table();
+    table.set_header(vec![
+        "TIMESTAMP",
+        "STATUS",
+        "RUN ID",
+        "PARTITION",
+        "SEVERITY",
+    ]);
+    for (ts, status, run_id, partition, severity) in executions {
+        table.add_row(vec![
+            Cell::new(ts),
+            Cell::new(status).fg(status_color(status)),
+            Cell::new(run_id),
+            Cell::new(partition),
+            Cell::new(severity),
         ]);
     }
     println!("{table}");

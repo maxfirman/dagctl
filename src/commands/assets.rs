@@ -531,3 +531,785 @@ pub async fn get_asset(
         AssetNodeOrError::Other => anyhow::bail!("Unexpected response type from API"),
     }
 }
+
+// --- Asset events ---
+
+#[derive(cynic::Enum, Clone, Copy, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "AssetEventHistoryEventTypeSelector"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetEventHistoryEventTypeSelector {
+    #[cynic(rename = "MATERIALIZATION")]
+    Materialization,
+    #[cynic(rename = "FAILED_TO_MATERIALIZE")]
+    FailedToMaterialize,
+    #[cynic(rename = "OBSERVATION")]
+    Observation,
+}
+
+#[derive(cynic::QueryVariables, Debug)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetEventsQueryVariables {
+    #[cynic(rename = "assetKey")]
+    asset_key: AssetKeyInput,
+    limit: i32,
+    #[cynic(rename = "eventTypeSelectors")]
+    event_type_selectors: Vec<AssetEventHistoryEventTypeSelector>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "AssetEventsQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetEventsQuery {
+    #[arguments(assetKey: $asset_key)]
+    #[cynic(rename = "assetOrError")]
+    asset_or_error: AssetOrError,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "AssetOrError",
+    variables = "AssetEventsQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetOrError {
+    Asset(AssetWithEvents),
+    AssetNotFoundError(AssetNotFoundError),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "Asset",
+    variables = "AssetEventsQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetWithEvents {
+    #[arguments(limit: $limit, eventTypeSelectors: $event_type_selectors)]
+    #[cynic(rename = "assetEventHistory")]
+    asset_event_history: AssetResultEventHistoryConnection,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetResultEventHistoryConnection {
+    results: Vec<AssetResultEventType>,
+}
+
+#[derive(cynic::InlineFragments, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetResultEventType")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetResultEventType {
+    MaterializationEvent(AssetMaterializationEvent),
+    ObservationEvent(AssetObservationEvent),
+    FailedToMaterializeEvent(AssetFailedToMaterializeEvent),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "MaterializationEvent")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetMaterializationEvent {
+    #[cynic(rename = "runId")]
+    run_id: String,
+    timestamp: String,
+    message: String,
+    partition: Option<String>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "ObservationEvent")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetObservationEvent {
+    #[cynic(rename = "runId")]
+    run_id: String,
+    timestamp: String,
+    message: String,
+    partition: Option<String>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "FailedToMaterializeEvent")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetFailedToMaterializeEvent {
+    #[cynic(rename = "runId")]
+    run_id: String,
+    timestamp: String,
+    message: String,
+    partition: Option<String>,
+}
+
+pub async fn get_asset_events(
+    token: &str,
+    api_url: &str,
+    key: String,
+    limit: Option<i32>,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
+    use cynic::{QueryBuilder, http::ReqwestExt};
+
+    let operation = AssetEventsQuery::build(AssetEventsQueryVariables {
+        asset_key: AssetKeyInput {
+            path: parse_asset_key(&key),
+        },
+        limit: limit.unwrap_or(25),
+        event_type_selectors: vec![
+            AssetEventHistoryEventTypeSelector::Materialization,
+            AssetEventHistoryEventTypeSelector::Observation,
+            AssetEventHistoryEventTypeSelector::FailedToMaterialize,
+        ],
+    });
+
+    let response = reqwest::Client::new()
+        .post(api_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .run_graphql(operation)
+        .await?;
+
+    if let Some(errors) = response.errors {
+        anyhow::bail!("GraphQL errors: {:?}", errors);
+    }
+
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
+    match data.asset_or_error {
+        AssetOrError::Asset(asset) => {
+            let events = asset.asset_event_history.results;
+            match fmt {
+                Some(f) => output::render(&events, f),
+                None => {
+                    let rows: Vec<_> = events
+                        .iter()
+                        .map(|e| match e {
+                            AssetResultEventType::MaterializationEvent(m) => (
+                                m.timestamp.clone(),
+                                "Materialization".into(),
+                                m.run_id.clone(),
+                                m.partition.clone().unwrap_or_default(),
+                                m.message.clone(),
+                            ),
+                            AssetResultEventType::ObservationEvent(o) => (
+                                o.timestamp.clone(),
+                                "Observation".into(),
+                                o.run_id.clone(),
+                                o.partition.clone().unwrap_or_default(),
+                                o.message.clone(),
+                            ),
+                            AssetResultEventType::FailedToMaterializeEvent(f) => (
+                                f.timestamp.clone(),
+                                "FailedToMaterialize".into(),
+                                f.run_id.clone(),
+                                f.partition.clone().unwrap_or_default(),
+                                f.message.clone(),
+                            ),
+                            AssetResultEventType::Other => (
+                                String::new(),
+                                "Unknown".into(),
+                                String::new(),
+                                String::new(),
+                                String::new(),
+                            ),
+                        })
+                        .collect();
+                    output::format_asset_events_table(&rows);
+                    Ok(())
+                }
+            }
+        }
+        AssetOrError::AssetNotFoundError(err) => {
+            anyhow::bail!("Asset not found: {}", err.message)
+        }
+        AssetOrError::Other => anyhow::bail!("Unexpected response type from API"),
+    }
+}
+
+// --- Asset partitions ---
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "AssetNodeQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetPartitionsQuery {
+    #[arguments(assetKey: $asset_key)]
+    #[cynic(rename = "assetNodeOrError")]
+    asset_node_or_error: AssetNodeOrErrorPartitions,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetNodeOrError")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetNodeOrErrorPartitions {
+    AssetNode(AssetNodePartitions),
+    AssetNotFoundError(AssetNotFoundError),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetNode")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetNodePartitions {
+    #[cynic(rename = "isPartitioned")]
+    is_partitioned: bool,
+    #[cynic(rename = "partitionStats")]
+    partition_stats: Option<PartitionStats>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct PartitionStats {
+    #[cynic(rename = "numMaterialized")]
+    num_materialized: i32,
+    #[cynic(rename = "numPartitions")]
+    num_partitions: i32,
+    #[cynic(rename = "numFailed")]
+    num_failed: i32,
+    #[cynic(rename = "numMaterializing")]
+    num_materializing: i32,
+}
+
+pub async fn get_asset_partitions(
+    token: &str,
+    api_url: &str,
+    key: String,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
+    use cynic::{QueryBuilder, http::ReqwestExt};
+
+    let operation = AssetPartitionsQuery::build(AssetNodeQueryVariables {
+        asset_key: AssetKeyInput {
+            path: parse_asset_key(&key),
+        },
+    });
+
+    let response = reqwest::Client::new()
+        .post(api_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .run_graphql(operation)
+        .await?;
+
+    if let Some(errors) = response.errors {
+        anyhow::bail!("GraphQL errors: {:?}", errors);
+    }
+
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
+    match data.asset_node_or_error {
+        AssetNodeOrErrorPartitions::AssetNode(node) => {
+            if !node.is_partitioned {
+                anyhow::bail!("Asset '{}' is not partitioned", key);
+            }
+            let stats = node
+                .partition_stats
+                .ok_or_else(|| anyhow::anyhow!("No partition stats available"))?;
+            match fmt {
+                Some(f) => output::render(&stats, f),
+                None => {
+                    output::format_asset_partitions_table(
+                        stats.num_partitions,
+                        stats.num_materialized,
+                        stats.num_failed,
+                        stats.num_materializing,
+                    );
+                    Ok(())
+                }
+            }
+        }
+        AssetNodeOrErrorPartitions::AssetNotFoundError(err) => {
+            anyhow::bail!("Asset not found: {}", err.message)
+        }
+        AssetNodeOrErrorPartitions::Other => anyhow::bail!("Unexpected response type from API"),
+    }
+}
+
+// --- Asset checks (list) ---
+
+#[derive(cynic::Enum, Clone, Copy, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheckExecutionResolvedStatus")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetCheckExecutionResolvedStatus {
+    InProgress,
+    Succeeded,
+    Failed,
+    ExecutionFailed,
+    Skipped,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "AssetNodeQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetChecksQuery {
+    #[arguments(assetKey: $asset_key)]
+    #[cynic(rename = "assetNodeOrError")]
+    asset_node_or_error: AssetNodeOrErrorChecks,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetNodeOrError")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetNodeOrErrorChecks {
+    AssetNode(AssetNodeWithChecks),
+    AssetNotFoundError(AssetNotFoundError),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetNode")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetNodeWithChecks {
+    #[cynic(rename = "assetChecksOrError")]
+    asset_checks_or_error: AssetChecksOrError,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetChecksOrError")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetChecksOrError {
+    AssetChecks(AssetChecks),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetChecks {
+    checks: Vec<AssetCheckSummary>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheck")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckSummary {
+    name: String,
+    description: Option<String>,
+    blocking: bool,
+    #[cynic(rename = "executionForLatestMaterialization")]
+    execution_for_latest_materialization: Option<AssetCheckExecutionSummary>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheckExecution")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckExecutionSummary {
+    status: AssetCheckExecutionResolvedStatus,
+    #[cynic(rename = "runId")]
+    run_id: String,
+    timestamp: f64,
+}
+
+pub async fn get_asset_checks(
+    token: &str,
+    api_url: &str,
+    key: String,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
+    use cynic::{QueryBuilder, http::ReqwestExt};
+
+    let operation = AssetChecksQuery::build(AssetNodeQueryVariables {
+        asset_key: AssetKeyInput {
+            path: parse_asset_key(&key),
+        },
+    });
+
+    let response = reqwest::Client::new()
+        .post(api_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .run_graphql(operation)
+        .await?;
+
+    if let Some(errors) = response.errors {
+        anyhow::bail!("GraphQL errors: {:?}", errors);
+    }
+
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
+    match data.asset_node_or_error {
+        AssetNodeOrErrorChecks::AssetNode(node) => match node.asset_checks_or_error {
+            AssetChecksOrError::AssetChecks(checks) => match fmt {
+                Some(f) => output::render(&checks.checks, f),
+                None => {
+                    let rows: Vec<_> = checks
+                        .checks
+                        .iter()
+                        .map(|c| {
+                            let (status, run_id, ts) =
+                                if let Some(ref exec) = c.execution_for_latest_materialization {
+                                    (
+                                        format!("{:?}", exec.status),
+                                        exec.run_id.clone(),
+                                        output::format_timestamp(Some(exec.timestamp)),
+                                    )
+                                } else {
+                                    (String::new(), String::new(), String::new())
+                                };
+                            (
+                                c.name.clone(),
+                                if c.blocking { "Yes" } else { "No" }.into(),
+                                status,
+                                run_id,
+                                ts,
+                                c.description.clone().unwrap_or_default(),
+                            )
+                        })
+                        .collect();
+                    output::format_asset_checks_table(&rows);
+                    Ok(())
+                }
+            },
+            AssetChecksOrError::Other => {
+                anyhow::bail!("Asset checks unavailable (migration or upgrade required)")
+            }
+        },
+        AssetNodeOrErrorChecks::AssetNotFoundError(err) => {
+            anyhow::bail!("Asset not found: {}", err.message)
+        }
+        AssetNodeOrErrorChecks::Other => anyhow::bail!("Unexpected response type from API"),
+    }
+}
+
+// --- Asset check (detail) ---
+
+#[derive(cynic::Enum, Clone, Copy, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheckSeverity")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetCheckSeverity {
+    Warn,
+    Error,
+}
+
+#[derive(cynic::Enum, Clone, Copy, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheckCanExecuteIndividually")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetCheckCanExecuteIndividually {
+    CanExecute,
+    RequiresMaterialization,
+    NeedsUserCodeUpgrade,
+}
+
+#[derive(cynic::QueryVariables, Debug)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckDetailQueryVariables {
+    #[cynic(rename = "assetKey")]
+    asset_key: AssetKeyInput,
+    #[cynic(rename = "checkName")]
+    check_name: String,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "AssetCheckDetailQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckDetailQuery {
+    #[arguments(assetKey: $asset_key)]
+    #[cynic(rename = "assetNodeOrError")]
+    asset_node_or_error: AssetNodeOrErrorCheckDetail,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "AssetNodeOrError",
+    variables = "AssetCheckDetailQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetNodeOrErrorCheckDetail {
+    AssetNode(AssetNodeWithCheckDetail),
+    AssetNotFoundError(AssetNotFoundError),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "AssetNode",
+    variables = "AssetCheckDetailQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetNodeWithCheckDetail {
+    #[arguments(checkName: $check_name)]
+    #[cynic(rename = "assetCheckOrError")]
+    asset_check_or_error: AssetCheckOrError,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheckOrError")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetCheckOrError {
+    AssetCheck(AssetCheckDetail),
+    AssetCheckNotFoundError(AssetCheckNotFoundError),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckNotFoundError {
+    message: String,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheck")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckDetail {
+    name: String,
+    description: Option<String>,
+    blocking: bool,
+    #[cynic(rename = "jobNames")]
+    job_names: Vec<String>,
+    #[cynic(rename = "canExecuteIndividually")]
+    can_execute_individually: AssetCheckCanExecuteIndividually,
+    #[cynic(rename = "automationCondition")]
+    automation_condition: Option<AutomationCondition>,
+    #[cynic(rename = "executionForLatestMaterialization")]
+    execution_for_latest_materialization: Option<AssetCheckExecutionDetail>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheckExecution")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckExecutionDetail {
+    status: AssetCheckExecutionResolvedStatus,
+    #[cynic(rename = "runId")]
+    run_id: String,
+    timestamp: f64,
+    evaluation: Option<AssetCheckEvaluation>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckEvaluation {
+    severity: AssetCheckSeverity,
+    success: bool,
+    description: Option<String>,
+}
+
+pub async fn get_asset_check(
+    token: &str,
+    api_url: &str,
+    key: String,
+    check_name: &str,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
+    use cynic::{QueryBuilder, http::ReqwestExt};
+
+    let operation = AssetCheckDetailQuery::build(AssetCheckDetailQueryVariables {
+        asset_key: AssetKeyInput {
+            path: parse_asset_key(&key),
+        },
+        check_name: check_name.to_string(),
+    });
+
+    let response = reqwest::Client::new()
+        .post(api_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .run_graphql(operation)
+        .await?;
+
+    if let Some(errors) = response.errors {
+        anyhow::bail!("GraphQL errors: {:?}", errors);
+    }
+
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
+    match data.asset_node_or_error {
+        AssetNodeOrErrorCheckDetail::AssetNode(node) => match node.asset_check_or_error {
+            AssetCheckOrError::AssetCheck(check) => match fmt {
+                Some(f) => output::render(&check, f),
+                None => {
+                    let (status, run_id, ts, severity, success) =
+                        if let Some(ref exec) = check.execution_for_latest_materialization {
+                            let (sev, suc) = if let Some(ref eval) = exec.evaluation {
+                                (format!("{:?}", eval.severity), eval.success.to_string())
+                            } else {
+                                (String::new(), String::new())
+                            };
+                            (
+                                format!("{:?}", exec.status),
+                                exec.run_id.clone(),
+                                output::format_timestamp(Some(exec.timestamp)),
+                                sev,
+                                suc,
+                            )
+                        } else {
+                            (
+                                String::new(),
+                                String::new(),
+                                String::new(),
+                                String::new(),
+                                String::new(),
+                            )
+                        };
+                    let automation = check
+                        .automation_condition
+                        .as_ref()
+                        .and_then(|ac| ac.label.clone())
+                        .unwrap_or_default();
+                    output::format_asset_check_detail(&output::AssetCheckDetail {
+                        name: &check.name,
+                        description: check.description.as_deref().unwrap_or(""),
+                        blocking: check.blocking,
+                        jobs: &check.job_names,
+                        can_execute_individually: &format!("{:?}", check.can_execute_individually),
+                        automation_condition: &automation,
+                        latest_status: &status,
+                        latest_run_id: &run_id,
+                        latest_timestamp: &ts,
+                        latest_severity: &severity,
+                        latest_success: &success,
+                    });
+                    Ok(())
+                }
+            },
+            AssetCheckOrError::AssetCheckNotFoundError(err) => {
+                anyhow::bail!("Asset check not found: {}", err.message)
+            }
+            AssetCheckOrError::Other => {
+                anyhow::bail!("Asset check unavailable (migration or upgrade required)")
+            }
+        },
+        AssetNodeOrErrorCheckDetail::AssetNotFoundError(err) => {
+            anyhow::bail!("Asset not found: {}", err.message)
+        }
+        AssetNodeOrErrorCheckDetail::Other => {
+            anyhow::bail!("Unexpected response type from API")
+        }
+    }
+}
+
+// --- Asset check executions ---
+
+#[derive(cynic::QueryVariables, Debug)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckExecutionsQueryVariables {
+    #[cynic(rename = "assetKey")]
+    asset_key: AssetKeyInput,
+    #[cynic(rename = "checkName")]
+    check_name: String,
+    limit: i32,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "AssetCheckExecutionsQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckExecutionsQuery {
+    #[arguments(assetKey: $asset_key, checkName: $check_name, limit: $limit)]
+    #[cynic(rename = "assetCheckExecutions")]
+    asset_check_executions: Vec<AssetCheckExecutionRow>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheckExecution")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckExecutionRow {
+    status: AssetCheckExecutionResolvedStatus,
+    #[cynic(rename = "runId")]
+    run_id: String,
+    timestamp: f64,
+    partition: Option<String>,
+    evaluation: Option<AssetCheckEvaluationSummary>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetCheckEvaluation")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetCheckEvaluationSummary {
+    severity: AssetCheckSeverity,
+}
+
+pub async fn get_asset_check_executions(
+    token: &str,
+    api_url: &str,
+    key: String,
+    check_name: &str,
+    limit: Option<i32>,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
+    use cynic::{QueryBuilder, http::ReqwestExt};
+
+    let operation = AssetCheckExecutionsQuery::build(AssetCheckExecutionsQueryVariables {
+        asset_key: AssetKeyInput {
+            path: parse_asset_key(&key),
+        },
+        check_name: check_name.to_string(),
+        limit: limit.unwrap_or(25),
+    });
+
+    let response = reqwest::Client::new()
+        .post(api_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .run_graphql(operation)
+        .await?;
+
+    if let Some(errors) = response.errors {
+        anyhow::bail!("GraphQL errors: {:?}", errors);
+    }
+
+    let data = response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
+    let executions = data.asset_check_executions;
+    match fmt {
+        Some(f) => output::render(&executions, f),
+        None => {
+            let rows: Vec<_> = executions
+                .iter()
+                .map(|e| {
+                    let severity = e
+                        .evaluation
+                        .as_ref()
+                        .map(|ev| format!("{:?}", ev.severity))
+                        .unwrap_or_default();
+                    (
+                        output::format_timestamp(Some(e.timestamp)),
+                        format!("{:?}", e.status),
+                        e.run_id.clone(),
+                        e.partition.clone().unwrap_or_default(),
+                        severity,
+                    )
+                })
+                .collect();
+            output::format_asset_check_executions_table(&rows);
+            Ok(())
+        }
+    }
+}

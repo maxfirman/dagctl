@@ -94,6 +94,30 @@ enum GetResource {
     },
     /// Show details of a specific asset (use slash-separated key, e.g. my_prefix/my_asset)
     Asset { key: String },
+    /// Get event history for an asset (materializations, observations, failures)
+    #[command(name = "asset-events")]
+    AssetEvents {
+        key: String,
+        #[arg(long)]
+        limit: Option<i32>,
+    },
+    /// Get partition status summary for an asset
+    #[command(name = "asset-partitions")]
+    AssetPartitions { key: String },
+    /// List asset checks with latest execution status
+    #[command(name = "asset-checks")]
+    AssetChecks { key: String },
+    /// Show details of a specific asset check
+    #[command(name = "asset-check")]
+    AssetCheck { key: String, check: String },
+    /// List historic executions for an asset check
+    #[command(name = "asset-check-executions")]
+    AssetCheckExecutions {
+        key: String,
+        check: String,
+        #[arg(long)]
+        limit: Option<i32>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -183,6 +207,32 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             }),
             GetResource::Asset { key } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::assets::get_asset(&token, &api_url, key, &fmt).await }),
+            GetResource::AssetEvents { key, limit } => {
+                tokio::runtime::Runtime::new()?.block_on(async {
+                    commands::assets::get_asset_events(&token, &api_url, key, limit, &fmt).await
+                })
+            }
+            GetResource::AssetPartitions { key } => {
+                tokio::runtime::Runtime::new()?.block_on(async {
+                    commands::assets::get_asset_partitions(&token, &api_url, key, &fmt).await
+                })
+            }
+            GetResource::AssetChecks { key } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::assets::get_asset_checks(&token, &api_url, key, &fmt).await
+            }),
+            GetResource::AssetCheck { key, check } => {
+                tokio::runtime::Runtime::new()?.block_on(async {
+                    commands::assets::get_asset_check(&token, &api_url, key, &check, &fmt).await
+                })
+            }
+            GetResource::AssetCheckExecutions { key, check, limit } => {
+                tokio::runtime::Runtime::new()?.block_on(async {
+                    commands::assets::get_asset_check_executions(
+                        &token, &api_url, key, &check, limit, &fmt,
+                    )
+                    .await
+                })
+            }
         },
         Commands::Debug => tokio::runtime::Runtime::new()?.block_on(async {
             commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await
