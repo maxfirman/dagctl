@@ -74,7 +74,7 @@ enum GetResource {
         partition: Option<String>,
         /// Filter by tag (key=value)
         #[arg(long, value_delimiter = ',')]
-        tag: Option<Vec<String>>,
+        tags: Option<Vec<String>>,
     },
     /// Show details of a specific run
     Run { run_id: String },
@@ -210,7 +210,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                 job,
                 launched_by,
                 partition,
-                tag,
+                tags,
             } => tokio::runtime::Runtime::new()?.block_on(async {
                 commands::runs::list_runs(
                     &token,
@@ -220,7 +220,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                     &job,
                     &launched_by,
                     &partition,
-                    &tag,
+                    &tags,
                     &fmt,
                 )
                 .await
