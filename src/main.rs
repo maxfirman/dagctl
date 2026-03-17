@@ -91,6 +91,9 @@ enum GetResource {
         group: Option<String>,
         #[arg(long)]
         code_location: Option<String>,
+        /// Filter by health status (comma-separated: healthy,warning,degraded,unknown,not-applicable)
+        #[arg(long, value_delimiter = ',')]
+        health: Vec<commands::assets::AssetHealthStatusFilter>,
     },
     /// Show details of a specific asset (use slash-separated key, e.g. my_prefix/my_asset)
     Asset { key: String },
@@ -202,8 +205,10 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             GetResource::Assets {
                 group,
                 code_location,
+                health,
             } => tokio::runtime::Runtime::new()?.block_on(async {
-                commands::assets::list_assets(&token, &api_url, group, code_location, &fmt).await
+                commands::assets::list_assets(&token, &api_url, group, code_location, health, &fmt)
+                    .await
             }),
             GetResource::Asset { key } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::assets::get_asset(&token, &api_url, key, &fmt).await }),

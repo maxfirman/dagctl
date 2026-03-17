@@ -234,15 +234,23 @@ pub fn format_job_detail(
 
 // --- get assets ---
 
-pub fn format_assets_table(assets: &[(String, String, String, String, String)]) {
+pub fn format_assets_table(assets: &[(String, String, String, String, String, String)]) {
     let mut table = new_table();
-    table.set_header(vec!["ASSET KEY", "GROUP", "CODE LOCATION", "KIND", "INFO"]);
-    for (key, group, location, kinds, info) in assets {
+    table.set_header(vec![
+        "ASSET KEY",
+        "GROUP",
+        "CODE LOCATION",
+        "KIND",
+        "HEALTH",
+        "INFO",
+    ]);
+    for (key, group, location, kinds, health, info) in assets {
         table.add_row(vec![
             Cell::new(key),
             Cell::new(group),
             Cell::new(location),
             Cell::new(kinds),
+            Cell::new(health).fg(status_color(health)),
             Cell::new(info),
         ]);
     }

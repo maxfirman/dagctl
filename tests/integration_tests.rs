@@ -665,23 +665,32 @@ async fn test_list_assets_success() {
         .with_body(
             json!({
                 "data": {
-                    "assetNodes": [
-                        {
-                            "id": "a1",
-                            "assetKey": {"path": ["my_prefix", "my_asset"]},
-                            "groupName": "default",
-                            "kinds": ["python"],
-                            "isPartitioned": false,
-                            "repository": {
-                                "id": "r1",
-                                "name": "__repository__",
-                                "location": {
-                                    "id": "l1",
-                                    "name": "my-location"
+                    "assetsOrError": {
+                        "__typename": "AssetConnection",
+                        "nodes": [
+                            {
+                                "id": "a1",
+                                "key": {"path": ["my_prefix", "my_asset"]},
+                                "assetHealth": {
+                                    "assetHealth": "HEALTHY"
+                                },
+                                "definition": {
+                                    "id": "d1",
+                                    "groupName": "default",
+                                    "kinds": ["python"],
+                                    "isPartitioned": false,
+                                    "repository": {
+                                        "id": "r1",
+                                        "name": "__repository__",
+                                        "location": {
+                                            "id": "l1",
+                                            "name": "my-location"
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    ]
+                        ]
+                    }
                 }
             })
             .to_string(),
@@ -691,7 +700,8 @@ async fn test_list_assets_success() {
 
     let api_url = format!("{}/graphql", server.url());
     let result =
-        dagctl::commands::assets::list_assets("test-token", &api_url, None, None, &None).await;
+        dagctl::commands::assets::list_assets("test-token", &api_url, None, None, vec![], &None)
+            .await;
 
     mock.assert_async().await;
     assert!(result.is_ok());

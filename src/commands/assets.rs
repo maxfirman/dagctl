@@ -29,20 +29,62 @@ pub fn format_asset_key(path: &[String]) -> String {
 
 // --- List assets ---
 
+#[derive(Clone, Debug, clap::ValueEnum)]
+pub enum AssetHealthStatusFilter {
+    Healthy,
+    Warning,
+    Degraded,
+    Unknown,
+    #[value(name = "not-applicable")]
+    NotApplicable,
+}
+
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(schema = "dagster", graphql_type = "CloudQuery")]
 #[cynic(schema_module = "crate::schema::schema")]
-struct AssetNodesQuery {
-    #[cynic(rename = "assetNodes")]
-    asset_nodes: Vec<AssetNodeSummary>,
+struct AssetsQuery {
+    #[cynic(rename = "assetsOrError")]
+    assets_or_error: AssetsOrErrorList,
+}
+
+#[derive(cynic::InlineFragments, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetsOrError")]
+#[cynic(schema_module = "crate::schema::schema")]
+enum AssetsOrErrorList {
+    AssetConnection(AssetConnection),
+    #[cynic(fallback)]
+    Other,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetConnection {
+    nodes: Vec<AssetListNode>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster", graphql_type = "Asset")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetListNode {
+    key: AssetKey,
+    #[cynic(rename = "assetHealth")]
+    asset_health: Option<AssetHealthSummary>,
+    definition: Option<AssetListDefinition>,
+}
+
+#[derive(cynic::QueryFragment, Debug, Serialize)]
+#[cynic(schema = "dagster", graphql_type = "AssetHealth")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetHealthSummary {
+    #[cynic(rename = "assetHealth")]
+    asset_health: AssetHealthStatus,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
 #[cynic(schema = "dagster", graphql_type = "AssetNode")]
 #[cynic(schema_module = "crate::schema::schema")]
-struct AssetNodeSummary {
-    #[cynic(rename = "assetKey")]
-    asset_key: AssetKey,
+struct AssetListDefinition {
     #[cynic(rename = "groupName")]
     group_name: String,
     kinds: Vec<String>,
@@ -72,6 +114,7 @@ struct AssetListEntry {
     code_location: String,
     kinds: Vec<String>,
     partitioned: bool,
+    health: String,
 }
 
 pub async fn list_assets(
@@ -79,6 +122,7 @@ pub async fn list_assets(
     api_url: &str,
     group: Option<String>,
     code_location: Option<String>,
+    health_filter: Vec<AssetHealthStatusFilter>,
     fmt: &Option<OutputFormat>,
 ) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
@@ -86,7 +130,7 @@ pub async fn list_assets(
     let response = reqwest::Client::new()
         .post(api_url)
         .header("Authorization", format!("Bearer {}", token))
-        .run_graphql(AssetNodesQuery::build(()))
+        .run_graphql(AssetsQuery::build(()))
         .await?;
 
     if let Some(errors) = response.errors {
@@ -97,28 +141,50 @@ pub async fn list_assets(
         .data
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
-    let entries: Vec<AssetListEntry> = data
-        .asset_nodes
+    let nodes = match data.assets_or_error {
+        AssetsOrErrorList::AssetConnection(conn) => conn.nodes,
+        AssetsOrErrorList::Other => anyhow::bail!("Unexpected response type from API"),
+    };
+
+    let entries: Vec<AssetListEntry> = nodes
         .into_iter()
-        .filter(|n| {
+        .filter_map(|n| {
+            let def = n.definition.as_ref()?;
+            let health_str = n
+                .asset_health
+                .as_ref()
+                .map(|h| format!("{:?}", h.asset_health))
+                .unwrap_or_default();
             if let Some(ref g) = group
-                && &n.group_name != g
+                && &def.group_name != g
             {
-                return false;
+                return None;
             }
             if let Some(ref loc) = code_location
-                && &n.repository.location.name != loc
+                && &def.repository.location.name != loc
             {
-                return false;
+                return None;
             }
-            true
-        })
-        .map(|n| AssetListEntry {
-            key: format_asset_key(&n.asset_key.path),
-            group: n.group_name,
-            code_location: n.repository.location.name,
-            kinds: n.kinds,
-            partitioned: n.is_partitioned,
+            if !health_filter.is_empty() {
+                let matches = health_filter.iter().any(|f| match f {
+                    AssetHealthStatusFilter::Healthy => health_str == "Healthy",
+                    AssetHealthStatusFilter::Warning => health_str == "Warning",
+                    AssetHealthStatusFilter::Degraded => health_str == "Degraded",
+                    AssetHealthStatusFilter::Unknown => health_str == "Unknown",
+                    AssetHealthStatusFilter::NotApplicable => health_str == "NotApplicable",
+                });
+                if !matches {
+                    return None;
+                }
+            }
+            Some(AssetListEntry {
+                key: format_asset_key(&n.key.path),
+                group: def.group_name.clone(),
+                code_location: def.repository.location.name.clone(),
+                kinds: def.kinds.clone(),
+                partitioned: def.is_partitioned,
+                health: health_str,
+            })
         })
         .collect();
 
@@ -133,6 +199,7 @@ pub async fn list_assets(
                         e.group.clone(),
                         e.code_location.clone(),
                         e.kinds.join(", "),
+                        e.health.clone(),
                         if e.partitioned {
                             "partitioned".into()
                         } else {
