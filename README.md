@@ -129,10 +129,10 @@ dagctl get runs --limit 10
 dagctl get run <RUN_ID>
 
 # Get all events for a run
-dagctl events <RUN_ID>
+dagctl get run-events <RUN_ID>
 
 # Get captured logs for a run
-dagctl logs <RUN_ID>
+dagctl get run-logs <RUN_ID>
 ```
 
 ### Code Locations
@@ -228,7 +228,7 @@ dagctl get runs -o json | jq .
 dagctl get runs -o json | jq '[.[] | select(.status == "FAILURE")]'
 
 # Extract stdout from logs
-dagctl logs <RUN_ID> -o json | jq -r '.stdout'
+dagctl get run-logs <RUN_ID> -o json | jq -r '.stdout'
 ```
 
 ## Configuration Reference

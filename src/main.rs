@@ -36,14 +36,6 @@ enum Commands {
         #[command(subcommand)]
         resource: GetResource,
     },
-    /// Get events for a run
-    Events {
-        run_id: String,
-    },
-    /// Get captured logs for a run
-    Logs {
-        run_id: String,
-    },
     Schema {
         #[command(subcommand)]
         action: SchemaCommands,
@@ -70,6 +62,12 @@ enum GetResource {
     },
     /// Show details of a specific run
     Run { run_id: String },
+    /// Get events for a run
+    #[command(name = "run-events")]
+    RunEvents { run_id: String },
+    /// Get captured logs for a run
+    #[command(name = "run-logs")]
+    RunLogs { run_id: String },
     /// List code locations
     #[command(name = "code-locations")]
     CodeLocations,
@@ -154,6 +152,11 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                 .block_on(async { commands::runs::list_runs(&token, &api_url, limit, &fmt).await }),
             GetResource::Run { run_id } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::runs::get_run(&token, &api_url, run_id, &fmt).await }),
+            GetResource::RunEvents { run_id } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::runs::get_events(&token, &api_url, run_id, &fmt).await
+            }),
+            GetResource::RunLogs { run_id } => tokio::runtime::Runtime::new()?
+                .block_on(async { commands::runs::get_logs(&token, &api_url, run_id, &fmt).await }),
             GetResource::CodeLocations => tokio::runtime::Runtime::new()?.block_on(async {
                 commands::code_locations::list_code_locations(&token, &api_url, &fmt).await
             }),
@@ -180,10 +183,6 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             GetResource::Asset { key } => tokio::runtime::Runtime::new()?
                 .block_on(async { commands::assets::get_asset(&token, &api_url, key, &fmt).await }),
         },
-        Commands::Events { run_id } => tokio::runtime::Runtime::new()?
-            .block_on(async { commands::runs::get_events(&token, &api_url, run_id, &fmt).await }),
-        Commands::Logs { run_id } => tokio::runtime::Runtime::new()?
-            .block_on(async { commands::runs::get_logs(&token, &api_url, run_id, &fmt).await }),
         Commands::Debug => tokio::runtime::Runtime::new()?.block_on(async {
             commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await
         }),
