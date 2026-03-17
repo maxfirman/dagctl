@@ -198,6 +198,10 @@ struct AssetNodeDetail {
     kinds: Vec<String>,
     #[cynic(rename = "isPartitioned")]
     is_partitioned: bool,
+    #[cynic(rename = "opName")]
+    op_name: Option<String>,
+    #[cynic(rename = "opVersion")]
+    op_version: Option<String>,
     #[cynic(rename = "jobNames")]
     job_names: Vec<String>,
     #[cynic(rename = "dependencyKeys")]
@@ -383,6 +387,8 @@ pub async fn get_asset(
                     description: node.description.as_deref().unwrap_or(""),
                     kinds: &node.kinds,
                     partitioned: node.is_partitioned,
+                    computed_by: node.op_name.as_deref().unwrap_or(""),
+                    code_version: node.op_version.as_deref().unwrap_or(""),
                     dependencies: &deps,
                     dependents: &dependents,
                     jobs: &node.job_names,

@@ -716,6 +716,8 @@ async fn test_get_asset_success() {
                         "description": "A test asset",
                         "kinds": ["python"],
                         "isPartitioned": false,
+                        "opName": "my_asset",
+                        "opVersion": "v1",
                         "jobNames": ["my_job"],
                         "dependencyKeys": [{"path": ["upstream"]}],
                         "dependedByKeys": [{"path": ["downstream"]}],

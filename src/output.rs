@@ -257,6 +257,8 @@ pub struct AssetDetail<'a> {
     pub description: &'a str,
     pub kinds: &'a [String],
     pub partitioned: bool,
+    pub computed_by: &'a str,
+    pub code_version: &'a str,
     pub dependencies: &'a [String],
     pub dependents: &'a [String],
     pub jobs: &'a [String],
@@ -292,6 +294,18 @@ pub fn format_asset_detail(detail: &AssetDetail) {
         Cell::new("Partitioned"),
         Cell::new(if detail.partitioned { "Yes" } else { "No" }),
     ]);
+    if !detail.computed_by.is_empty() {
+        table.add_row(vec![
+            Cell::new("Computed By"),
+            Cell::new(detail.computed_by),
+        ]);
+    }
+    if !detail.code_version.is_empty() {
+        table.add_row(vec![
+            Cell::new("Code Version"),
+            Cell::new(detail.code_version),
+        ]);
+    }
     if !detail.owners.is_empty() {
         table.add_row(vec![
             Cell::new("Owners"),
