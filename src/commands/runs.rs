@@ -322,7 +322,13 @@ impl DagsterRunEvent {
                 String::new(),
                 e.message.clone(),
             ),
-            Self::Other => (String::new(), "Unknown".into(), String::new(), String::new(), String::new()),
+            Self::Other => (
+                String::new(),
+                "Unknown".into(),
+                String::new(),
+                String::new(),
+                String::new(),
+            ),
         }
     }
 }

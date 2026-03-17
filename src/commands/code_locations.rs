@@ -122,13 +122,7 @@ pub async fn list_code_locations(
                 None => {
                     let rows: Vec<_> = entries
                         .iter()
-                        .map(|e| {
-                            (
-                                e.name.clone(),
-                                e.load_status.clone(),
-                                e.updated_timestamp,
-                            )
-                        })
+                        .map(|e| (e.name.clone(), e.load_status.clone(), e.updated_timestamp))
                         .collect();
                     output::format_code_locations_table(&rows);
                     Ok(())
@@ -366,7 +360,11 @@ pub async fn get_code_location(
                     let libs: Vec<_> = detail
                         .dagster_library_versions
                         .as_ref()
-                        .map(|ls| ls.iter().map(|l| (l.name.clone(), l.version.clone())).collect())
+                        .map(|ls| {
+                            ls.iter()
+                                .map(|l| (l.name.clone(), l.version.clone()))
+                                .collect()
+                        })
                         .unwrap_or_default();
                     output::format_code_location_detail(
                         &detail.name,

@@ -137,10 +137,7 @@ pub fn format_code_location_detail(
     }
 
     if !libraries.is_empty() {
-        let lib_lines: Vec<String> = libraries
-            .iter()
-            .map(|(n, v)| format!("{n} {v}"))
-            .collect();
+        let lib_lines: Vec<String> = libraries.iter().map(|(n, v)| format!("{n} {v}")).collect();
         table.add_row(vec![
             Cell::new("Libraries"),
             Cell::new(lib_lines.join("\n")),

@@ -130,37 +130,21 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             }
         },
         Commands::Get { resource } => match resource {
-            GetResource::Runs { limit } => {
-                tokio::runtime::Runtime::new()?.block_on(async {
-                    commands::runs::list_runs(&token, &api_url, limit, &fmt).await
-                })
-            }
-            GetResource::Run { run_id } => {
-                tokio::runtime::Runtime::new()?.block_on(async {
-                    commands::runs::get_run(&token, &api_url, run_id, &fmt).await
-                })
-            }
-            GetResource::CodeLocations => {
-                tokio::runtime::Runtime::new()?.block_on(async {
-                    commands::code_locations::list_code_locations(&token, &api_url, &fmt).await
-                })
-            }
-            GetResource::CodeLocation { name } => {
-                tokio::runtime::Runtime::new()?.block_on(async {
-                    commands::code_locations::get_code_location(&token, &api_url, name, &fmt).await
-                })
-            }
+            GetResource::Runs { limit } => tokio::runtime::Runtime::new()?
+                .block_on(async { commands::runs::list_runs(&token, &api_url, limit, &fmt).await }),
+            GetResource::Run { run_id } => tokio::runtime::Runtime::new()?
+                .block_on(async { commands::runs::get_run(&token, &api_url, run_id, &fmt).await }),
+            GetResource::CodeLocations => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::code_locations::list_code_locations(&token, &api_url, &fmt).await
+            }),
+            GetResource::CodeLocation { name } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::code_locations::get_code_location(&token, &api_url, name, &fmt).await
+            }),
         },
-        Commands::Events { run_id } => {
-            tokio::runtime::Runtime::new()?.block_on(async {
-                commands::runs::get_events(&token, &api_url, run_id, &fmt).await
-            })
-        }
-        Commands::Logs { run_id } => {
-            tokio::runtime::Runtime::new()?.block_on(async {
-                commands::runs::get_logs(&token, &api_url, run_id, &fmt).await
-            })
-        }
+        Commands::Events { run_id } => tokio::runtime::Runtime::new()?
+            .block_on(async { commands::runs::get_events(&token, &api_url, run_id, &fmt).await }),
+        Commands::Logs { run_id } => tokio::runtime::Runtime::new()?
+            .block_on(async { commands::runs::get_logs(&token, &api_url, run_id, &fmt).await }),
         Commands::Debug => tokio::runtime::Runtime::new()?.block_on(async {
             commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await
         }),
