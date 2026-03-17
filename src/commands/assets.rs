@@ -1155,10 +1155,13 @@ pub async fn get_asset_check(
             AssetCheckOrError::AssetCheck(check) => match fmt {
                 Some(f) => output::render(&check, f),
                 None => {
-                    let (status, run_id, ts, severity, success) =
+                    let (status, run_id, ts, severity, result) =
                         if let Some(ref exec) = check.execution_for_latest_materialization {
-                            let (sev, suc) = if let Some(ref eval) = exec.evaluation {
-                                (format!("{:?}", eval.severity), eval.success.to_string())
+                            let (sev, res) = if let Some(ref eval) = exec.evaluation {
+                                (
+                                    format!("{:?}", eval.severity),
+                                    if eval.success { "Pass" } else { "Fail" }.into(),
+                                )
                             } else {
                                 (String::new(), String::new())
                             };
@@ -1167,7 +1170,7 @@ pub async fn get_asset_check(
                                 exec.run_id.clone(),
                                 output::format_timestamp(Some(exec.timestamp)),
                                 sev,
-                                suc,
+                                res,
                             )
                         } else {
                             (
@@ -1190,11 +1193,11 @@ pub async fn get_asset_check(
                         jobs: &check.job_names,
                         can_execute_individually: &format!("{:?}", check.can_execute_individually),
                         automation_condition: &automation,
+                        severity: &severity,
                         latest_status: &status,
                         latest_run_id: &run_id,
                         latest_timestamp: &ts,
-                        latest_severity: &severity,
-                        latest_success: &success,
+                        latest_result: &result,
                     });
                     Ok(())
                 }

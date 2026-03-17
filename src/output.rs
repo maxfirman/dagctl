@@ -28,8 +28,8 @@ pub fn format_timestamp(epoch: Option<f64>) -> String {
 
 fn status_color(status: &str) -> Color {
     match status {
-        "Success" | "SUCCEEDED" => Color::Green,
-        "Failure" | "FAILED" | "EXECUTION_FAILED" => Color::Red,
+        "Success" | "SUCCEEDED" | "Pass" => Color::Green,
+        "Failure" | "FAILED" | "EXECUTION_FAILED" | "Fail" => Color::Red,
         "Canceled" | "Canceling" | "SKIPPED" => Color::Yellow,
         "Started" | "Starting" | "IN_PROGRESS" => Color::Cyan,
         "Queued" | "NotStarted" | "Managed" => Color::White,
@@ -371,7 +371,12 @@ pub fn format_asset_detail(detail: &AssetDetail) {
 pub fn format_asset_events_table(events: &[(String, String, String, String, String, String)]) {
     let mut table = new_table();
     table.set_header(vec![
-        "TIMESTAMP", "TYPE", "STATUS", "RUN ID", "PARTITION", "MESSAGE",
+        "TIMESTAMP",
+        "TYPE",
+        "STATUS",
+        "RUN ID",
+        "PARTITION",
+        "MESSAGE",
     ]);
     for (ts, event_type, status, run_id, partition, message) in events {
         let msg = if message.len() > 80 {
@@ -445,11 +450,11 @@ pub struct AssetCheckDetail<'a> {
     pub jobs: &'a [String],
     pub can_execute_individually: &'a str,
     pub automation_condition: &'a str,
+    pub severity: &'a str,
     pub latest_status: &'a str,
     pub latest_run_id: &'a str,
     pub latest_timestamp: &'a str,
-    pub latest_severity: &'a str,
-    pub latest_success: &'a str,
+    pub latest_result: &'a str,
 }
 
 pub fn format_asset_check_detail(detail: &AssetCheckDetail) {
@@ -482,11 +487,20 @@ pub fn format_asset_check_detail(detail: &AssetCheckDetail) {
             Cell::new(detail.automation_condition),
         ]);
     }
+    if !detail.severity.is_empty() {
+        table.add_row(vec![Cell::new("Severity"), Cell::new(detail.severity)]);
+    }
     if !detail.latest_status.is_empty() {
         table.add_row(vec![
             Cell::new("Latest Status"),
             Cell::new(detail.latest_status).fg(status_color(detail.latest_status)),
         ]);
+        if !detail.latest_result.is_empty() {
+            table.add_row(vec![
+                Cell::new("Latest Result"),
+                Cell::new(detail.latest_result).fg(status_color(detail.latest_result)),
+            ]);
+        }
         table.add_row(vec![
             Cell::new("Latest Run ID"),
             Cell::new(detail.latest_run_id),
@@ -495,16 +509,6 @@ pub fn format_asset_check_detail(detail: &AssetCheckDetail) {
             Cell::new("Latest Timestamp"),
             Cell::new(detail.latest_timestamp),
         ]);
-        if !detail.latest_severity.is_empty() {
-            table.add_row(vec![
-                Cell::new("Latest Severity"),
-                Cell::new(detail.latest_severity),
-            ]);
-            table.add_row(vec![
-                Cell::new("Latest Success"),
-                Cell::new(detail.latest_success),
-            ]);
-        }
     }
     println!("{table}");
 }
