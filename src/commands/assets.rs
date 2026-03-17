@@ -1110,7 +1110,7 @@ pub async fn get_asset(
 
 // --- Asset events ---
 
-#[derive(cynic::Enum, Clone, Copy, Debug)]
+#[derive(cynic::Enum, Clone, Copy, Debug, PartialEq)]
 #[cynic(
     schema = "dagster",
     graphql_type = "AssetEventHistoryEventTypeSelector"
@@ -1241,6 +1241,60 @@ pub enum AssetEventStatusFilter {
     Failure,
 }
 
+fn resolve_event_selectors(
+    event_type: &[AssetEventTypeFilter],
+    status: &[AssetEventStatusFilter],
+) -> Vec<AssetEventHistoryEventTypeSelector> {
+    // Each user-facing type maps to GraphQL selectors:
+    //   materialization -> [MATERIALIZATION, FAILED_TO_MATERIALIZE]
+    //   observation -> [OBSERVATION]
+    //   failed-to-materialize -> [FAILED_TO_MATERIALIZE]
+    // Status then filters: success keeps non-failure selectors, failure keeps FAILED_TO_MATERIALIZE
+    let types: Vec<AssetEventTypeFilter> = if event_type.is_empty() {
+        vec![
+            AssetEventTypeFilter::Materialization,
+            AssetEventTypeFilter::Observation,
+        ]
+    } else {
+        event_type.to_vec()
+    };
+
+    let mut selectors = Vec::new();
+    let want_success = status.is_empty()
+        || status
+            .iter()
+            .any(|s| matches!(s, AssetEventStatusFilter::Success));
+    let want_failure = status.is_empty()
+        || status
+            .iter()
+            .any(|s| matches!(s, AssetEventStatusFilter::Failure));
+
+    for t in &types {
+        match t {
+            AssetEventTypeFilter::Materialization => {
+                if want_success {
+                    selectors.push(AssetEventHistoryEventTypeSelector::Materialization);
+                }
+                if want_failure {
+                    selectors.push(AssetEventHistoryEventTypeSelector::FailedToMaterialize);
+                }
+            }
+            AssetEventTypeFilter::Observation => {
+                if want_success {
+                    selectors.push(AssetEventHistoryEventTypeSelector::Observation);
+                }
+            }
+            AssetEventTypeFilter::FailedToMaterialize => {
+                if want_failure {
+                    selectors.push(AssetEventHistoryEventTypeSelector::FailedToMaterialize);
+                }
+            }
+        }
+    }
+    selectors.dedup();
+    selectors
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn get_asset_events(
     token: &str,
@@ -1254,28 +1308,18 @@ pub async fn get_asset_events(
 ) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
-    let selectors = if event_type.is_empty() {
-        vec![
-            AssetEventHistoryEventTypeSelector::Materialization,
-            AssetEventHistoryEventTypeSelector::Observation,
-            AssetEventHistoryEventTypeSelector::FailedToMaterialize,
-        ]
-    } else {
-        event_type
-            .iter()
-            .map(|t| match t {
-                AssetEventTypeFilter::Materialization => {
-                    AssetEventHistoryEventTypeSelector::Materialization
-                }
-                AssetEventTypeFilter::Observation => {
-                    AssetEventHistoryEventTypeSelector::Observation
-                }
-                AssetEventTypeFilter::FailedToMaterialize => {
-                    AssetEventHistoryEventTypeSelector::FailedToMaterialize
-                }
-            })
-            .collect()
-    };
+    let selectors = resolve_event_selectors(&event_type, &status);
+
+    if selectors.is_empty() {
+        // Filters exclude all event types (e.g. --type observation --status failure)
+        return match fmt {
+            Some(f) => output::render(&Vec::<AssetResultEventType>::new(), f),
+            None => {
+                output::format_asset_events_table(&[]);
+                Ok(())
+            }
+        };
+    }
 
     let operation = AssetEventsQuery::build(AssetEventsQueryVariables {
         asset_key: AssetKeyInput {
@@ -1302,21 +1346,7 @@ pub async fn get_asset_events(
 
     match data.asset_or_error {
         AssetOrError::Asset(asset) => {
-            let events: Vec<_> = asset
-                .asset_event_history
-                .results
-                .into_iter()
-                .filter(|e| {
-                    if status.is_empty() {
-                        return true;
-                    }
-                    let is_failure = matches!(e, AssetResultEventType::FailedToMaterializeEvent(_));
-                    status.iter().any(|s| match s {
-                        AssetEventStatusFilter::Success => !is_failure,
-                        AssetEventStatusFilter::Failure => is_failure,
-                    })
-                })
-                .collect();
+            let events = asset.asset_event_history.results;
             match fmt {
                 Some(f) => output::render(&events, f),
                 None => {
