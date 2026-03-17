@@ -175,17 +175,30 @@ dagctl debug
 
 ## Output
 
-All commands output JSON to stdout. Errors go to stderr with a non-zero exit code. Pipe to `jq` for filtering:
+By default, commands display results as formatted tables. Use `-o` to switch format:
+
+```bash
+# Default table output
+dagctl get runs --limit 5
+
+# JSON output (for scripting/piping)
+dagctl get runs --limit 5 -o json
+
+# YAML output
+dagctl get runs --limit 5 -o yaml
+```
+
+JSON output can be piped to `jq` for filtering:
 
 ```bash
 # Pretty-print runs
-dagctl get runs --limit 5 | jq .
+dagctl get runs -o json | jq .
 
 # Get only failed runs
-dagctl get runs | jq '[.[] | select(.status == "FAILURE")]'
+dagctl get runs -o json | jq '[.[] | select(.status == "FAILURE")]'
 
 # Extract stdout from logs
-dagctl logs <RUN_ID> | jq -r '.stdout'
+dagctl logs <RUN_ID> -o json | jq -r '.stdout'
 ```
 
 ## Configuration Reference

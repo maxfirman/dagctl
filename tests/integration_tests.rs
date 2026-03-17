@@ -264,7 +264,7 @@ async fn test_list_code_locations_success() {
 
     let api_url = format!("{}/graphql", server.url());
     let result =
-        dagctl::commands::code_locations::list_code_locations("test-token", &api_url).await;
+        dagctl::commands::code_locations::list_code_locations("test-token", &api_url, &None).await;
 
     mock.assert_async().await;
     assert!(result.is_ok());
@@ -295,7 +295,7 @@ async fn test_list_code_locations_empty() {
 
     let api_url = format!("{}/graphql", server.url());
     let result =
-        dagctl::commands::code_locations::list_code_locations("test-token", &api_url).await;
+        dagctl::commands::code_locations::list_code_locations("test-token", &api_url, &None).await;
 
     mock.assert_async().await;
     assert!(result.is_ok());
@@ -325,7 +325,7 @@ async fn test_list_code_locations_error_response() {
 
     let api_url = format!("{}/graphql", server.url());
     let result =
-        dagctl::commands::code_locations::list_code_locations("test-token", &api_url).await;
+        dagctl::commands::code_locations::list_code_locations("test-token", &api_url, &None).await;
 
     mock.assert_async().await;
     assert!(result.is_err());
@@ -387,6 +387,7 @@ async fn test_get_code_location_success() {
         "test-token",
         &api_url,
         "my-code-location".to_string(),
+        &None,
     )
     .await;
 
@@ -418,6 +419,7 @@ async fn test_get_code_location_not_found() {
         "test-token",
         &api_url,
         "nonexistent".to_string(),
+        &None,
     )
     .await;
 
@@ -453,6 +455,7 @@ async fn test_get_code_location_python_error() {
         "test-token",
         &api_url,
         "broken-location".to_string(),
+        &None,
     )
     .await;
 
@@ -498,6 +501,7 @@ async fn test_get_code_location_loading_state() {
         "test-token",
         &api_url,
         "loading-location".to_string(),
+        &None,
     )
     .await;
 

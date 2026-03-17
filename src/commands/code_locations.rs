@@ -1,6 +1,8 @@
 use anyhow::Result;
 use serde::Serialize;
 
+use crate::output::{self, OutputFormat};
+
 // --- Shared types ---
 
 #[derive(cynic::Enum, Clone, Copy, Debug)]
@@ -82,7 +84,11 @@ fn to_metadata(m: Vec<RepositoryMetadata>) -> Vec<MetadataEntry> {
         .collect()
 }
 
-pub async fn list_code_locations(token: &str, api_url: &str) -> Result<()> {
+pub async fn list_code_locations(
+    token: &str,
+    api_url: &str,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     let response = reqwest::Client::new()
@@ -111,8 +117,23 @@ pub async fn list_code_locations(token: &str, api_url: &str) -> Result<()> {
                     display_metadata: to_metadata(e.display_metadata),
                 })
                 .collect();
-            println!("{}", serde_json::to_string_pretty(&entries)?);
-            Ok(())
+            match fmt {
+                Some(f) => output::render(&entries, f),
+                None => {
+                    let rows: Vec<_> = entries
+                        .iter()
+                        .map(|e| {
+                            (
+                                e.name.clone(),
+                                e.load_status.clone(),
+                                e.updated_timestamp,
+                            )
+                        })
+                        .collect();
+                    output::format_code_locations_table(&rows);
+                    Ok(())
+                }
+            }
         }
         WorkspaceOrError::Other => anyhow::bail!("Unexpected response type from API"),
     }
@@ -259,7 +280,12 @@ struct LibraryVersion {
     version: String,
 }
 
-pub async fn get_code_location(token: &str, api_url: &str, name: String) -> Result<()> {
+pub async fn get_code_location(
+    token: &str,
+    api_url: &str,
+    name: String,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     let operation = CodeLocationQuery::build(CodeLocationQueryVariables { name: name.clone() });
@@ -286,7 +312,7 @@ pub async fn get_code_location(token: &str, api_url: &str, name: String) -> Resu
         WorkspaceLocationEntryOrError::WorkspaceLocationEntry(e) => {
             let (repositories, library_versions) = match e.location_or_load_error {
                 Some(RepositoryLocationOrLoadError::RepositoryLocation(loc)) => {
-                    let repos = loc
+                    let repos: Vec<RepositorySummary> = loc
                         .repositories
                         .into_iter()
                         .map(|r| RepositorySummary {
@@ -317,8 +343,41 @@ pub async fn get_code_location(token: &str, api_url: &str, name: String) -> Resu
                 repositories,
                 dagster_library_versions: library_versions,
             };
-            println!("{}", serde_json::to_string_pretty(&detail)?);
-            Ok(())
+
+            match fmt {
+                Some(f) => output::render(&detail, f),
+                None => {
+                    let repos: Vec<_> = detail
+                        .repositories
+                        .as_ref()
+                        .map(|rs| {
+                            rs.iter()
+                                .map(|r| {
+                                    (
+                                        r.name.clone(),
+                                        r.jobs_count,
+                                        r.schedules_count,
+                                        r.sensors_count,
+                                    )
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let libs: Vec<_> = detail
+                        .dagster_library_versions
+                        .as_ref()
+                        .map(|ls| ls.iter().map(|l| (l.name.clone(), l.version.clone())).collect())
+                        .unwrap_or_default();
+                    output::format_code_location_detail(
+                        &detail.name,
+                        &detail.load_status,
+                        detail.updated_timestamp,
+                        &repos,
+                        &libs,
+                    );
+                    Ok(())
+                }
+            }
         }
         WorkspaceLocationEntryOrError::PythonError(err) => {
             anyhow::bail!("Error loading code location: {}", err.message)

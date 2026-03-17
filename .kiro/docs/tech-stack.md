@@ -15,6 +15,9 @@
 | `tokio` | 1 (full) | Async runtime |
 | `anyhow` | 1 | Error handling |
 | `toml` | 0.8 | Config file parsing |
+| `comfy-table` | 7 | Terminal table rendering |
+| `chrono` | 0.4 | Timestamp formatting |
+| `serde_yaml_ng` | 0.10 | YAML serialization |
 
 ## Dev Dependencies
 

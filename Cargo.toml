@@ -1,19 +1,22 @@
 [package]
 name = "dagctl"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
+chrono = "0.4"
 colored = "2"
+comfy-table = "7"
 cynic = { version = "3", features = ["http-reqwest"] }
 reqwest = { version = "0.13", features = ["json"] }
 reqwest_012 = { package = "reqwest", version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
 self_update = { version = "0.43", default-features = false, features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate", "reqwest", "rustls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_yaml_ng = "0.10"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 toml = "0.8"

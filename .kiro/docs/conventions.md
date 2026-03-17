@@ -76,3 +76,22 @@ pub async fn my_command(token: &str, api_url: &str, args...) -> Result<()> {
 - All output types derive `Serialize`
 - Enum variants that appear in JSON use `#[serde(tag = "eventType")]` for tagged representation (see `DagsterRunEvent`)
 - `RunStatus` is a cynic `Enum` (not `Serialize`) — it gets serialized through the parent struct
+
+## Output Format Pattern
+
+Commands accept an `&Option<OutputFormat>` parameter:
+- `None` → table output (default), using `comfy-table` for formatting
+- `Some(Json)` → `serde_json::to_string_pretty`
+- `Some(Yaml)` → `serde_yaml_ng::to_string`
+
+The `output::render()` helper handles JSON/YAML for any `Serialize` type. Table formatting is command-specific (e.g., `output::format_runs_table`, `output::format_code_location_detail`).
+
+```rust
+match fmt {
+    Some(f) => output::render(&data, f),
+    None => {
+        output::format_runs_table(&rows);
+        Ok(())
+    }
+}
+```

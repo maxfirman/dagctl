@@ -1,6 +1,8 @@
 use anyhow::Result;
 use serde::Serialize;
 
+use crate::output::{self, OutputFormat};
+
 #[derive(cynic::QueryFragment, Debug, Serialize)]
 #[cynic(schema = "dagster", graphql_type = "Run")]
 #[cynic(schema_module = "crate::schema::schema")]
@@ -67,7 +69,12 @@ struct RunsQuery {
     runs_or_error: RunsOrError,
 }
 
-pub async fn list_runs(token: &str, api_url: &str, limit: Option<i32>) -> Result<()> {
+pub async fn list_runs(
+    token: &str,
+    api_url: &str,
+    limit: Option<i32>,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     let operation = RunsQuery::build(RunsQueryVariables {
@@ -91,14 +98,27 @@ pub async fn list_runs(token: &str, api_url: &str, limit: Option<i32>) -> Result
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
     match data.runs_or_error {
-        RunsOrError::Runs(runs) => {
-            let json = serde_json::to_string_pretty(&runs.results)?;
-            println!("{}", json);
-            Ok(())
-        }
-        RunsOrError::Other => {
-            anyhow::bail!("Unexpected response type from API")
-        }
+        RunsOrError::Runs(runs) => match fmt {
+            Some(f) => output::render(&runs.results, f),
+            None => {
+                let rows: Vec<_> = runs
+                    .results
+                    .iter()
+                    .map(|r| {
+                        (
+                            r.run_id.clone(),
+                            r.job_name.clone(),
+                            format!("{:?}", r.status),
+                            r.start_time,
+                            r.end_time,
+                        )
+                    })
+                    .collect();
+                output::format_runs_table(&rows);
+                Ok(())
+            }
+        },
+        RunsOrError::Other => anyhow::bail!("Unexpected response type from API"),
     }
 }
 
@@ -155,7 +175,12 @@ struct RunQuery {
     run_or_error: RunOrError,
 }
 
-pub async fn get_run(token: &str, api_url: &str, run_id: String) -> Result<()> {
+pub async fn get_run(
+    token: &str,
+    api_url: &str,
+    run_id: String,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     let operation = RunQuery::build(RunQueryVariables {
@@ -178,17 +203,22 @@ pub async fn get_run(token: &str, api_url: &str, run_id: String) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
     match data.run_or_error {
-        RunOrError::Run(run) => {
-            let json = serde_json::to_string_pretty(&run)?;
-            println!("{}", json);
-            Ok(())
-        }
-        RunOrError::RunNotFoundError(err) => {
-            anyhow::bail!("Run not found: {}", err.message)
-        }
-        RunOrError::Other => {
-            anyhow::bail!("Unexpected response type from API")
-        }
+        RunOrError::Run(run) => match fmt {
+            Some(f) => output::render(&run, f),
+            None => {
+                output::format_run_detail(
+                    &run.run_id,
+                    &run.job_name,
+                    &format!("{:?}", run.status),
+                    run.start_time,
+                    run.end_time,
+                    &run.run_config_yaml,
+                );
+                Ok(())
+            }
+        },
+        RunOrError::RunNotFoundError(err) => anyhow::bail!("Run not found: {}", err.message),
+        RunOrError::Other => anyhow::bail!("Unexpected response type from API"),
     }
 }
 
@@ -217,6 +247,84 @@ enum DagsterRunEvent {
     RunFailureEvent(RunFailureEvent),
     #[cynic(fallback)]
     Other,
+}
+
+impl DagsterRunEvent {
+    fn to_table_row(&self) -> (String, String, String, String, String) {
+        match self {
+            Self::ExecutionStepStartEvent(e) => (
+                e.timestamp.clone(),
+                "StepStart".into(),
+                format!("{:?}", e.level),
+                e.step_key.clone().unwrap_or_default(),
+                e.message.clone(),
+            ),
+            Self::ExecutionStepSuccessEvent(e) => (
+                e.timestamp.clone(),
+                "StepSuccess".into(),
+                format!("{:?}", e.level),
+                e.step_key.clone().unwrap_or_default(),
+                e.message.clone(),
+            ),
+            Self::ExecutionStepFailureEvent(e) => (
+                e.timestamp.clone(),
+                "StepFailure".into(),
+                format!("{:?}", e.level),
+                e.step_key.clone().unwrap_or_default(),
+                e.message.clone(),
+            ),
+            Self::LogMessageEvent(e) => (
+                e.timestamp.clone(),
+                "Log".into(),
+                format!("{:?}", e.level),
+                e.step_key.clone().unwrap_or_default(),
+                e.message.clone(),
+            ),
+            Self::LogsCapturedEvent(e) => (
+                e.timestamp.clone(),
+                "LogsCaptured".into(),
+                format!("{:?}", e.level),
+                e.step_key.clone().unwrap_or_default(),
+                e.message.clone(),
+            ),
+            Self::MaterializationEvent(e) => (
+                e.timestamp.clone(),
+                "Materialization".into(),
+                format!("{:?}", e.level),
+                e.step_key.clone().unwrap_or_default(),
+                e.message.clone(),
+            ),
+            Self::EngineEvent(e) => (
+                e.timestamp.clone(),
+                "Engine".into(),
+                format!("{:?}", e.level),
+                e.step_key.clone().unwrap_or_default(),
+                e.message.clone(),
+            ),
+            Self::RunStartEvent(e) => (
+                e.timestamp.clone(),
+                "RunStart".into(),
+                format!("{:?}", e.level),
+                String::new(),
+                e.message.clone(),
+            ),
+            Self::RunSuccessEvent(e) => (
+                e.timestamp.clone(),
+                "RunSuccess".into(),
+                format!("{:?}", e.level),
+                String::new(),
+                e.message.clone(),
+            ),
+            Self::RunFailureEvent(e) => (
+                e.timestamp.clone(),
+                "RunFailure".into(),
+                format!("{:?}", e.level),
+                String::new(),
+                e.message.clone(),
+            ),
+            Self::Other => (String::new(), "Unknown".into(), String::new(), String::new(), String::new()),
+        }
+    }
 }
 
 #[derive(cynic::QueryFragment, Debug, Serialize)]
@@ -413,7 +521,12 @@ struct RunEventsQuery {
     run_or_error: RunOrErrorEvents,
 }
 
-pub async fn get_events(token: &str, api_url: &str, run_id: String) -> Result<()> {
+pub async fn get_events(
+    token: &str,
+    api_url: &str,
+    run_id: String,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     let operation = RunEventsQuery::build(RunEventsQueryVariables {
@@ -436,17 +549,23 @@ pub async fn get_events(token: &str, api_url: &str, run_id: String) -> Result<()
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
     match data.run_or_error {
-        RunOrErrorEvents::Run(run) => {
-            let json = serde_json::to_string_pretty(&run.event_connection.events)?;
-            println!("{}", json);
-            Ok(())
-        }
+        RunOrErrorEvents::Run(run) => match fmt {
+            Some(f) => output::render(&run.event_connection.events, f),
+            None => {
+                let rows: Vec<_> = run
+                    .event_connection
+                    .events
+                    .iter()
+                    .map(|e| e.to_table_row())
+                    .collect();
+                output::format_events_table(&rows);
+                Ok(())
+            }
+        },
         RunOrErrorEvents::RunNotFoundError(err) => {
             anyhow::bail!("Run not found: {}", err.message)
         }
-        RunOrErrorEvents::Other => {
-            anyhow::bail!("Unexpected response type from API")
-        }
+        RunOrErrorEvents::Other => anyhow::bail!("Unexpected response type from API"),
     }
 }
 
@@ -506,7 +625,12 @@ struct RunLogsQuery {
     run_or_error: RunOrErrorLogs,
 }
 
-pub async fn get_logs(token: &str, api_url: &str, run_id: String) -> Result<()> {
+pub async fn get_logs(
+    token: &str,
+    api_url: &str,
+    run_id: String,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
 
     // First, fetch events to find LogsCapturedEvent
@@ -530,26 +654,22 @@ pub async fn get_logs(token: &str, api_url: &str, run_id: String) -> Result<()> 
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
     let file_key = match events_data.run_or_error {
-        RunOrErrorEvents::Run(run) => {
-            // Find first LogsCapturedEvent
-            run.event_connection
-                .events
-                .iter()
-                .find_map(|event| {
-                    if let DagsterRunEvent::LogsCapturedEvent(log_event) = event {
-                        Some(log_event.file_key.clone())
-                    } else {
-                        None
-                    }
-                })
-                .ok_or_else(|| anyhow::anyhow!("No LogsCapturedEvent found for this run"))?
-        }
+        RunOrErrorEvents::Run(run) => run
+            .event_connection
+            .events
+            .iter()
+            .find_map(|event| {
+                if let DagsterRunEvent::LogsCapturedEvent(log_event) = event {
+                    Some(log_event.file_key.clone())
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| anyhow::anyhow!("No LogsCapturedEvent found for this run"))?,
         RunOrErrorEvents::RunNotFoundError(err) => {
             anyhow::bail!("Run not found: {}", err.message)
         }
-        RunOrErrorEvents::Other => {
-            anyhow::bail!("Unexpected response type from API")
-        }
+        RunOrErrorEvents::Other => anyhow::bail!("Unexpected response type from API"),
     };
 
     // Now fetch the captured logs using the file_key
@@ -573,16 +693,19 @@ pub async fn get_logs(token: &str, api_url: &str, run_id: String) -> Result<()> 
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
     match logs_data.run_or_error {
-        RunOrErrorLogs::Run(run) => {
-            let json = serde_json::to_string_pretty(&run.captured_logs)?;
-            println!("{}", json);
-            Ok(())
-        }
+        RunOrErrorLogs::Run(run) => match fmt {
+            Some(f) => output::render(&run.captured_logs, f),
+            None => {
+                output::format_logs_raw(
+                    run.captured_logs.stdout.as_deref(),
+                    run.captured_logs.stderr.as_deref(),
+                );
+                Ok(())
+            }
+        },
         RunOrErrorLogs::RunNotFoundError(err) => {
             anyhow::bail!("Run not found: {}", err.message)
         }
-        RunOrErrorLogs::Other => {
-            anyhow::bail!("Unexpected response type from API")
-        }
+        RunOrErrorLogs::Other => anyhow::bail!("Unexpected response type from API"),
     }
 }

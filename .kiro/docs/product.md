@@ -16,5 +16,5 @@ Data engineers and platform teams who manage Dagster pipelines and need CLI-base
 - **Authentication**: Token resolution via CLI flag → env var → config file (priority order)
 - **Shell completion**: Generate completions for bash, zsh, fish, and PowerShell
 - **Self-update**: Update to the latest release via `dagctl self update`
-- **JSON output**: All commands emit JSON to stdout; errors go to stderr with non-zero exit
+- **Output formats**: Table (default), JSON (`-o json`), and YAML (`-o yaml`)
 - **Debug**: Print diagnostic info about API connectivity, version, and config
