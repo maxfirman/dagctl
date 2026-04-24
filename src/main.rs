@@ -135,6 +135,14 @@ enum GetResource {
     /// Get partition status summary for an asset
     #[command(name = "asset-partitions")]
     AssetPartitions { key: String },
+    /// Show upstream/downstream dependency graph for an asset
+    #[command(name = "asset-lineage")]
+    AssetLineage {
+        key: String,
+        /// Number of hops to traverse (default: 1)
+        #[arg(long, default_value_t = 1)]
+        depth: i32,
+    },
     /// List asset checks with latest execution status
     #[command(name = "asset-checks")]
     AssetChecks { key: String },
@@ -291,6 +299,11 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             GetResource::AssetPartitions { key } => {
                 tokio::runtime::Runtime::new()?.block_on(async {
                     commands::assets::get_asset_partitions(&token, &api_url, key, &fmt).await
+                })
+            }
+            GetResource::AssetLineage { key, depth } => {
+                tokio::runtime::Runtime::new()?.block_on(async {
+                    commands::assets::get_asset_lineage(&token, &api_url, key, depth, &fmt).await
                 })
             }
             GetResource::AssetChecks { key } => tokio::runtime::Runtime::new()?.block_on(async {

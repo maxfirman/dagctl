@@ -1243,3 +1243,220 @@ async fn test_get_asset_check_executions_success() {
     mock.assert_async().await;
     assert!(result.is_ok());
 }
+
+// --- Asset lineage tests ---
+
+#[tokio::test]
+async fn test_asset_lineage_depth1() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodes": [
+                        {
+                            "assetKey": {"path": ["root"]},
+                            "dependencyKeys": [
+                                {"path": ["upstream1"]},
+                                {"path": ["upstream2"]}
+                            ],
+                            "dependedByKeys": [
+                                {"path": ["downstream1"]}
+                            ]
+                        }
+                    ]
+                }
+            })
+            .to_string(),
+        )
+        .expect_at_least(1)
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_lineage(
+        "test-token",
+        &api_url,
+        "root".to_string(),
+        1,
+        &Some(dagctl::output::OutputFormat::Json),
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_asset_lineage_depth2() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodes": [
+                        {
+                            "assetKey": {"path": ["upstream1"]},
+                            "dependencyKeys": [{"path": ["upstream2"]}],
+                            "dependedByKeys": []
+                        },
+                        {
+                            "assetKey": {"path": ["downstream1"]},
+                            "dependencyKeys": [],
+                            "dependedByKeys": [{"path": ["downstream2"]}]
+                        }
+                    ]
+                }
+            })
+            .to_string(),
+        )
+        .expect_at_least(1)
+        .create_async()
+        .await;
+
+    // First call returns root node (reuse same mock for simplicity)
+    let _root_mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodes": [
+                        {
+                            "assetKey": {"path": ["root"]},
+                            "dependencyKeys": [{"path": ["upstream1"]}],
+                            "dependedByKeys": [{"path": ["downstream1"]}]
+                        }
+                    ]
+                }
+            })
+            .to_string(),
+        )
+        .expect_at_least(1)
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_lineage(
+        "test-token",
+        &api_url,
+        "root".to_string(),
+        2,
+        &Some(dagctl::output::OutputFormat::Json),
+    )
+    .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_asset_lineage_not_found() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodes": []
+                }
+            })
+            .to_string(),
+        )
+        .expect_at_least(1)
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_lineage(
+        "test-token",
+        &api_url,
+        "nonexistent".to_string(),
+        1,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Asset not found: nonexistent")
+    );
+}
+
+#[tokio::test]
+async fn test_asset_lineage_cycle() {
+    let mut server = Server::new_async().await;
+
+    // Root depends on A, A depends on root (cycle)
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodes": [
+                        {
+                            "assetKey": {"path": ["a"]},
+                            "dependencyKeys": [{"path": ["root"]}],
+                            "dependedByKeys": []
+                        }
+                    ]
+                }
+            })
+            .to_string(),
+        )
+        .expect_at_least(1)
+        .create_async()
+        .await;
+
+    let _root_mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetNodes": [
+                        {
+                            "assetKey": {"path": ["root"]},
+                            "dependencyKeys": [],
+                            "dependedByKeys": [{"path": ["a"]}]
+                        }
+                    ]
+                }
+            })
+            .to_string(),
+        )
+        .expect_at_least(1)
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_lineage(
+        "test-token",
+        &api_url,
+        "root".to_string(),
+        3,
+        &Some(dagctl::output::OutputFormat::Json),
+    )
+    .await;
+
+    // Should succeed without infinite loop
+    assert!(result.is_ok());
+}

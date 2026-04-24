@@ -185,6 +185,22 @@ dagctl get asset-check-executions <KEY> <CHECK_NAME> --status failed
 dagctl get asset-check-executions <KEY> <CHECK_NAME> --status failed,execution-failed
 ```
 
+### Asset Lineage
+
+```bash
+# Show upstream/downstream dependency graph (default depth: 1 hop)
+dagctl get asset-lineage <KEY>
+
+# Traverse deeper (2 hops)
+dagctl get asset-lineage <KEY> --depth 2
+
+# JSON output returns { nodes: [...], edges: [{ from, to }] } adjacency list
+dagctl get asset-lineage <KEY> -o json
+
+# YAML output
+dagctl get asset-lineage <KEY> --depth 2 -o yaml
+```
+
 ### Schema Management
 
 ```bash

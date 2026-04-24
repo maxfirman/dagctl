@@ -2341,3 +2341,154 @@ fn matches_status(
         }
     })
 }
+// --- Asset lineage ---
+
+#[derive(cynic::QueryVariables, Debug)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetLineageQueryVariables {
+    #[cynic(rename = "assetKeys")]
+    asset_keys: Option<Vec<AssetKeyInput>>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(
+    schema = "dagster",
+    graphql_type = "CloudQuery",
+    variables = "AssetLineageQueryVariables"
+)]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetLineageQuery {
+    #[arguments(assetKeys: $asset_keys)]
+    #[cynic(rename = "assetNodes")]
+    asset_nodes: Vec<AssetNodeLineage>,
+}
+
+#[derive(cynic::QueryFragment, Debug)]
+#[cynic(schema = "dagster", graphql_type = "AssetNode")]
+#[cynic(schema_module = "crate::schema::schema")]
+struct AssetNodeLineage {
+    #[cynic(rename = "assetKey")]
+    asset_key: AssetKey,
+    #[cynic(rename = "dependencyKeys")]
+    dependency_keys: Vec<AssetKey>,
+    #[cynic(rename = "dependedByKeys")]
+    depended_by_keys: Vec<AssetKey>,
+}
+
+#[derive(Serialize)]
+pub struct LineageGraph {
+    nodes: Vec<String>,
+    edges: Vec<LineageEdge>,
+}
+
+#[derive(Serialize)]
+pub struct LineageEdge {
+    from: String,
+    to: String,
+}
+
+pub async fn get_asset_lineage(
+    token: &str,
+    api_url: &str,
+    key: String,
+    depth: i32,
+    fmt: &Option<OutputFormat>,
+) -> Result<()> {
+    use cynic::{QueryBuilder, http::ReqwestExt};
+    use std::collections::HashSet;
+
+    let client = reqwest::Client::new();
+    let root_key = parse_asset_key(&key);
+    let root_str = format_asset_key(&root_key);
+
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut edges: Vec<LineageEdge> = Vec::new();
+    let mut frontier: Vec<Vec<String>> = vec![root_key];
+    visited.insert(root_str.clone());
+
+    for _ in 0..depth {
+        if frontier.is_empty() {
+            break;
+        }
+
+        let operation = AssetLineageQuery::build(AssetLineageQueryVariables {
+            asset_keys: Some(
+                frontier
+                    .iter()
+                    .map(|p| AssetKeyInput { path: p.clone() })
+                    .collect(),
+            ),
+        });
+
+        let response = client
+            .post(api_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .run_graphql(operation)
+            .await?;
+
+        if let Some(errs) = response.errors {
+            anyhow::bail!("GraphQL errors: {:?}", errs);
+        }
+
+        let data = response
+            .data
+            .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+
+        if data.asset_nodes.is_empty() && edges.is_empty() {
+            anyhow::bail!("Asset not found: {}", key);
+        }
+
+        let mut next_frontier = Vec::new();
+
+        for node in &data.asset_nodes {
+            let node_str = format_asset_key(&node.asset_key.path);
+            for dep in &node.dependency_keys {
+                let dep_str = format_asset_key(&dep.path);
+                edges.push(LineageEdge {
+                    from: dep_str.clone(),
+                    to: node_str.clone(),
+                });
+                if visited.insert(dep_str) {
+                    next_frontier.push(dep.path.clone());
+                }
+            }
+            for dep in &node.depended_by_keys {
+                let dep_str = format_asset_key(&dep.path);
+                edges.push(LineageEdge {
+                    from: node_str.clone(),
+                    to: dep_str.clone(),
+                });
+                if visited.insert(dep_str) {
+                    next_frontier.push(dep.path.clone());
+                }
+            }
+        }
+
+        frontier = next_frontier;
+    }
+
+    let mut nodes: Vec<String> = visited.into_iter().collect();
+    nodes.sort();
+    edges.sort_by(|a, b| (&a.from, &a.to).cmp(&(&b.from, &b.to)));
+    edges.dedup_by(|a, b| a.from == b.from && a.to == b.to);
+
+    let graph = LineageGraph { nodes, edges };
+
+    match fmt {
+        Some(f) => output::render(&graph, f),
+        None => {
+            if graph.edges.is_empty() {
+                println!("No lineage edges found for {}", key);
+            } else {
+                let mut table = comfy_table::Table::new();
+                table.load_preset(comfy_table::presets::UTF8_FULL);
+                table.set_header(vec!["FROM", "TO"]);
+                for e in &graph.edges {
+                    table.add_row(vec![&e.from, &e.to]);
+                }
+                println!("{table}");
+            }
+            Ok(())
+        }
+    }
+}
