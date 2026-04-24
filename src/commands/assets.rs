@@ -2394,7 +2394,6 @@ pub async fn get_asset_lineage(
     depth: i32,
     fmt: &Option<OutputFormat>,
 ) -> Result<()> {
-    use cynic::{QueryBuilder, http::ReqwestExt};
     use std::collections::HashSet;
 
     let client = reqwest::Client::new();
@@ -2403,44 +2402,53 @@ pub async fn get_asset_lineage(
 
     let mut visited: HashSet<String> = HashSet::new();
     let mut edges: Vec<LineageEdge> = Vec::new();
-    let mut frontier: Vec<Vec<String>> = vec![root_key];
     visited.insert(root_str.clone());
 
-    for _ in 0..depth {
-        if frontier.is_empty() {
+    // Query root node first
+    let root_nodes = fetch_lineage_nodes(&client, token, api_url, &[root_key]).await?;
+    if root_nodes.is_empty() {
+        anyhow::bail!("Asset not found: {}", key);
+    }
+
+    let mut upstream_frontier: Vec<Vec<String>> = Vec::new();
+    let mut downstream_frontier: Vec<Vec<String>> = Vec::new();
+
+    for node in &root_nodes {
+        let node_str = format_asset_key(&node.asset_key.path);
+        for dep in &node.dependency_keys {
+            let dep_str = format_asset_key(&dep.path);
+            edges.push(LineageEdge {
+                from: dep_str.clone(),
+                to: node_str.clone(),
+            });
+            if visited.insert(dep_str) {
+                upstream_frontier.push(dep.path.clone());
+            }
+        }
+        for dep in &node.depended_by_keys {
+            let dep_str = format_asset_key(&dep.path);
+            edges.push(LineageEdge {
+                from: node_str.clone(),
+                to: dep_str.clone(),
+            });
+            if visited.insert(dep_str) {
+                downstream_frontier.push(dep.path.clone());
+            }
+        }
+    }
+
+    // Remaining hops: traverse upstream and downstream in parallel
+    for _ in 1..depth {
+        if upstream_frontier.is_empty() && downstream_frontier.is_empty() {
             break;
         }
 
-        let operation = AssetLineageQuery::build(AssetLineageQueryVariables {
-            asset_keys: Some(
-                frontier
-                    .iter()
-                    .map(|p| AssetKeyInput { path: p.clone() })
-                    .collect(),
-            ),
-        });
+        let up_fut = fetch_lineage_nodes(&client, token, api_url, &upstream_frontier);
+        let down_fut = fetch_lineage_nodes(&client, token, api_url, &downstream_frontier);
+        let (up_nodes, down_nodes) = tokio::try_join!(up_fut, down_fut)?;
 
-        let response = client
-            .post(api_url)
-            .header("Authorization", format!("Bearer {}", token))
-            .run_graphql(operation)
-            .await?;
-
-        if let Some(errs) = response.errors {
-            anyhow::bail!("GraphQL errors: {:?}", errs);
-        }
-
-        let data = response
-            .data
-            .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
-
-        if data.asset_nodes.is_empty() && edges.is_empty() {
-            anyhow::bail!("Asset not found: {}", key);
-        }
-
-        let mut next_frontier = Vec::new();
-
-        for node in &data.asset_nodes {
+        upstream_frontier = Vec::new();
+        for node in &up_nodes {
             let node_str = format_asset_key(&node.asset_key.path);
             for dep in &node.dependency_keys {
                 let dep_str = format_asset_key(&dep.path);
@@ -2449,9 +2457,14 @@ pub async fn get_asset_lineage(
                     to: node_str.clone(),
                 });
                 if visited.insert(dep_str) {
-                    next_frontier.push(dep.path.clone());
+                    upstream_frontier.push(dep.path.clone());
                 }
             }
+        }
+
+        downstream_frontier = Vec::new();
+        for node in &down_nodes {
+            let node_str = format_asset_key(&node.asset_key.path);
             for dep in &node.depended_by_keys {
                 let dep_str = format_asset_key(&dep.path);
                 edges.push(LineageEdge {
@@ -2459,12 +2472,10 @@ pub async fn get_asset_lineage(
                     to: dep_str.clone(),
                 });
                 if visited.insert(dep_str) {
-                    next_frontier.push(dep.path.clone());
+                    downstream_frontier.push(dep.path.clone());
                 }
             }
         }
-
-        frontier = next_frontier;
     }
 
     let mut nodes: Vec<String> = visited.into_iter().collect();
@@ -2491,4 +2502,40 @@ pub async fn get_asset_lineage(
             Ok(())
         }
     }
+}
+
+async fn fetch_lineage_nodes(
+    client: &reqwest::Client,
+    token: &str,
+    api_url: &str,
+    keys: &[Vec<String>],
+) -> Result<Vec<AssetNodeLineage>> {
+    use cynic::{QueryBuilder, http::ReqwestExt};
+
+    if keys.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let operation = AssetLineageQuery::build(AssetLineageQueryVariables {
+        asset_keys: Some(
+            keys.iter()
+                .map(|p| AssetKeyInput { path: p.clone() })
+                .collect(),
+        ),
+    });
+
+    let response = client
+        .post(api_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .run_graphql(operation)
+        .await?;
+
+    if let Some(errs) = response.errors {
+        anyhow::bail!("GraphQL errors: {:?}", errs);
+    }
+
+    Ok(response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?
+        .asset_nodes)
 }
