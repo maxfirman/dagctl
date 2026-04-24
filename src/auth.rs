@@ -56,6 +56,22 @@ pub fn resolve_deployment(cli_deployment: Option<String>) -> Option<String> {
     None
 }
 
+pub fn resolve_github_url(cli_github_url: Option<String>) -> Option<String> {
+    if let Some(github_url) = cli_github_url {
+        return Some(github_url);
+    }
+
+    if let Ok(github_url) = std::env::var("DAGCTL_GITHUB_URL") {
+        return Some(github_url);
+    }
+
+    if let Some(config) = crate::config::load_config() {
+        return config.github_url;
+    }
+
+    None
+}
+
 pub fn build_api_url(organization: &str, deployment: Option<&str>) -> String {
     match deployment {
         Some(d) => format!("https://{}.dagster.cloud/{}/graphql", organization, d),

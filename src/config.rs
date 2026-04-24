@@ -6,6 +6,7 @@ pub struct Config {
     pub token: Option<String>,
     pub organization: Option<String>,
     pub deployment: Option<String>,
+    pub github_url: Option<String>,
 }
 
 pub fn load_config() -> Option<Config> {

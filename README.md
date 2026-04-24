@@ -85,6 +85,14 @@ dagctl can update itself to the latest release:
 dagctl self update
 ```
 
+If you're behind a corporate proxy that blocks direct access to GitHub, you can point dagctl at a mirror/proxy (e.g., Artifactory):
+
+```bash
+dagctl self update --github-url https://artifactory.example.com/artifactory/github.com-api
+```
+
+This can also be set via the `DAGCTL_GITHUB_URL` environment variable or `github_url` in `~/.dagctl/config.toml`.
+
 ## Shell Completion
 
 Generate completions for your shell:
@@ -306,6 +314,7 @@ dagctl get run-logs <RUN_ID> -o json | jq -r '.stdout'
 token = "your-api-token"
 organization = "your-org"
 deployment = "prod"          # optional
+github_url = "https://artifactory.example.com/artifactory/github.com-api"  # optional
 ```
 
 ### Environment variables
@@ -315,6 +324,7 @@ deployment = "prod"          # optional
 | `DAGSTER_API_TOKEN` | API token |
 | `DAGSTER_ORGANIZATION` | Dagster Cloud organization name |
 | `DAGSTER_DEPLOYMENT` | Deployment name (e.g., `prod`) |
+| `DAGCTL_GITHUB_URL` | GitHub API base URL for self-update (e.g., Artifactory proxy) |
 
 ## Development
 

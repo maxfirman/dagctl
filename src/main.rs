@@ -22,6 +22,10 @@ struct Cli {
     #[arg(long, global = true)]
     deployment: Option<String>,
 
+    /// GitHub API base URL (for proxies/mirrors)
+    #[arg(long, global = true)]
+    github_url: Option<String>,
+
     /// Output format (default: table)
     #[arg(short = 'o', long = "output", global = true)]
     output: Option<OutputFormat>,
@@ -193,7 +197,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     match &cli.command {
         Commands::SelfCmd {
             action: SelfCommands::Update,
-        } => return commands::update::run_update(),
+        } => return commands::update::run_update(auth::resolve_github_url(cli.github_url)),
         Commands::SelfCmd {
             action: SelfCommands::Skill { install },
         } => return commands::skill::run_skill(*install),
