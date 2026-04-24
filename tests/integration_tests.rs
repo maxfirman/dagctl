@@ -1295,7 +1295,7 @@ async fn test_asset_lineage_depth1() {
 async fn test_asset_lineage_depth2() {
     let mut server = Server::new_async().await;
 
-    let mock = server
+    let _mock = server
         .mock("POST", "/graphql")
         .with_status(200)
         .with_header("content-type", "application/json")
@@ -1403,7 +1403,7 @@ async fn test_asset_lineage_cycle() {
     let mut server = Server::new_async().await;
 
     // Root depends on A, A depends on root (cycle)
-    let mock = server
+    let _mock = server
         .mock("POST", "/graphql")
         .with_status(200)
         .with_header("content-type", "application/json")
