@@ -904,6 +904,8 @@ async fn test_get_asset_events_success() {
         vec![],
         vec![],
         None,
+        None,
+        None,
         &None,
     )
     .await;
@@ -942,6 +944,8 @@ async fn test_get_asset_events_not_found() {
         None,
         vec![],
         vec![],
+        None,
+        None,
         None,
         &None,
     )
@@ -1459,4 +1463,280 @@ async fn test_asset_lineage_cycle() {
 
     // Should succeed without infinite loop
     assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_events_with_since() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .match_body(mockito::Matcher::PartialJsonString(
+            r#"{"variables":{"afterTimestampMillis":"1777593600000"}}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetOrError": {
+                        "__typename": "Asset",
+                        "id": "a1",
+                        "key": {"path": ["my_asset"]},
+                        "assetEventHistory": {
+                            "results": [
+                                {
+                                    "__typename": "MaterializationEvent",
+                                    "runId": "run-1",
+                                    "timestamp": "1777700000000",
+                                    "message": "Materialized after since",
+                                    "partition": null
+                                }
+                            ],
+                            "cursor": null
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_events(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        Some(25),
+        vec![],
+        vec![],
+        None,
+        Some("2026-05-01T00:00:00Z".to_string()),
+        None,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_events_with_until() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .match_body(mockito::Matcher::PartialJsonString(
+            r#"{"variables":{"beforeTimestampMillis":"1777593600000"}}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetOrError": {
+                        "__typename": "Asset",
+                        "id": "a1",
+                        "key": {"path": ["my_asset"]},
+                        "assetEventHistory": {
+                            "results": [],
+                            "cursor": null
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_events(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        Some(25),
+        vec![],
+        vec![],
+        None,
+        None,
+        Some("2026-05-01T00:00:00Z".to_string()),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_events_with_since_and_until() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .match_body(mockito::Matcher::PartialJsonString(
+            r#"{"variables":{"afterTimestampMillis":"1777593600000","beforeTimestampMillis":"1778803200000"}}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetOrError": {
+                        "__typename": "Asset",
+                        "id": "a1",
+                        "key": {"path": ["my_asset"]},
+                        "assetEventHistory": {
+                            "results": [
+                                {
+                                    "__typename": "MaterializationEvent",
+                                    "runId": "run-1",
+                                    "timestamp": "1777700000000",
+                                    "message": "In range",
+                                    "partition": null
+                                }
+                            ],
+                            "cursor": null
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_events(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        Some(25),
+        vec![],
+        vec![],
+        None,
+        Some("2026-05-01T00:00:00Z".to_string()),
+        Some("2026-05-15T00:00:00Z".to_string()),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_events_with_since_and_other_filters() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .match_body(mockito::Matcher::PartialJsonString(
+            r#"{"variables":{"afterTimestampMillis":"1777593600000"}}"#.to_string(),
+        ))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "assetOrError": {
+                        "__typename": "Asset",
+                        "id": "a1",
+                        "key": {"path": ["my_asset"]},
+                        "assetEventHistory": {
+                            "results": [
+                                {
+                                    "__typename": "MaterializationEvent",
+                                    "runId": "run-1",
+                                    "timestamp": "1777700000000",
+                                    "message": "Filtered event",
+                                    "partition": "2026-05-02"
+                                }
+                            ],
+                            "cursor": null
+                        }
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::assets::get_asset_events(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        Some(10),
+        vec![dagctl::commands::assets::AssetEventTypeFilter::Materialization],
+        vec![],
+        Some("2026-05-02".to_string()),
+        Some("2026-05-01T00:00:00Z".to_string()),
+        None,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_get_asset_events_invalid_since_date() {
+    let server = Server::new_async().await;
+    let api_url = format!("{}/graphql", server.url());
+
+    let result = dagctl::commands::assets::get_asset_events(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        None,
+        vec![],
+        vec![],
+        None,
+        Some("not-a-date".to_string()),
+        None,
+        &None,
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid date format")
+    );
+}
+
+#[tokio::test]
+async fn test_get_asset_events_invalid_until_date() {
+    let server = Server::new_async().await;
+    let api_url = format!("{}/graphql", server.url());
+
+    let result = dagctl::commands::assets::get_asset_events(
+        "test-token",
+        &api_url,
+        "my_asset".to_string(),
+        None,
+        vec![],
+        vec![],
+        None,
+        None,
+        Some("garbage".to_string()),
+        &None,
+    )
+    .await;
+
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid date format")
+    );
 }

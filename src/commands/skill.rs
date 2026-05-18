@@ -156,6 +156,15 @@ dagctl get asset-events <KEY> --status failure
 # Filter by partition
 dagctl get asset-events <KEY> --partition 2026-03-17
 
+# Filter by date (ISO 8601 or YYYY-MM-DD)
+dagctl get asset-events <KEY> --since 2026-05-01
+dagctl get asset-events <KEY> --until 2026-05-15
+dagctl get asset-events <KEY> --since 2026-05-01 --until 2026-05-15
+dagctl get asset-events <KEY> --since 2026-05-01T10:30:00Z
+# Note: events are always returned newest-first. --limit (default 25) caps
+# from the newest end of the range. So --since 2026-05-01 --limit 10 returns
+# the 10 most recent events after May 1st, not the 10 oldest.
+
 # Get detail for a specific event (use timestamp from asset-events output)
 dagctl get asset-event <KEY> <TIMESTAMP>
 ```

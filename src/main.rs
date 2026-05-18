@@ -135,6 +135,12 @@ enum GetResource {
         /// Filter by partition
         #[arg(long)]
         partition: Option<String>,
+        /// Only events after this date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        since: Option<String>,
+        /// Only events before this date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        until: Option<String>,
     },
     /// Get partition status summary for an asset
     #[command(name = "asset-partitions")]
@@ -294,9 +300,11 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                 event_type,
                 status,
                 partition,
+                since,
+                until,
             } => tokio::runtime::Runtime::new()?.block_on(async {
                 commands::assets::get_asset_events(
-                    &token, &api_url, key, limit, event_type, status, partition, &fmt,
+                    &token, &api_url, key, limit, event_type, status, partition, since, until, &fmt,
                 )
                 .await
             }),

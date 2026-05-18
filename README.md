@@ -229,6 +229,12 @@ dagctl get asset-events <KEY> --type materialization
 dagctl get asset-events <KEY> --status failure
 dagctl get asset-events <KEY> --partition 2026-03-17
 
+# Filter events by date (ISO 8601 or YYYY-MM-DD)
+dagctl get asset-events <KEY> --since 2026-05-01
+dagctl get asset-events <KEY> --until 2026-05-15
+dagctl get asset-events <KEY> --since 2026-05-01 --until 2026-05-15
+dagctl get asset-events <KEY> --since 2026-05-01T10:30:00Z
+
 # Get detail for a specific event (use timestamp from asset-events output)
 dagctl get asset-event <KEY> <TIMESTAMP>
 

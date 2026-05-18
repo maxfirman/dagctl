@@ -1,7 +1,28 @@
 use anyhow::Result;
+use chrono::{DateTime, FixedOffset, Local, NaiveDate};
 use serde::Serialize;
 
 use crate::output::{self, OutputFormat};
+
+/// Parse a date string (ISO 8601 datetime or YYYY-MM-DD) into millisecond timestamp string.
+/// Date-only values are interpreted as midnight in the local timezone.
+pub fn parse_date_to_millis(s: &str) -> Result<String> {
+    if let Ok(dt) = DateTime::<FixedOffset>::parse_from_rfc3339(s) {
+        return Ok(dt.timestamp_millis().to_string());
+    }
+    if let Ok(date) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        let local = date.and_hms_opt(0, 0, 0).unwrap();
+        let dt = local
+            .and_local_timezone(Local)
+            .single()
+            .ok_or_else(|| anyhow::anyhow!("Ambiguous local time for date: {}", s))?;
+        return Ok(dt.timestamp_millis().to_string());
+    }
+    anyhow::bail!(
+        "Invalid date format '{}'. Use YYYY-MM-DD or ISO 8601 (e.g. 2026-05-01T10:30:00Z)",
+        s
+    )
+}
 
 // --- Shared types ---
 
@@ -1134,6 +1155,10 @@ struct AssetEventsQueryVariables {
     #[cynic(rename = "eventTypeSelectors")]
     event_type_selectors: Vec<AssetEventHistoryEventTypeSelector>,
     partitions: Option<Vec<String>>,
+    #[cynic(rename = "afterTimestampMillis")]
+    after_timestamp_millis: Option<String>,
+    #[cynic(rename = "beforeTimestampMillis")]
+    before_timestamp_millis: Option<String>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -1171,7 +1196,7 @@ enum AssetOrError {
 )]
 #[cynic(schema_module = "crate::schema::schema")]
 struct AssetWithEvents {
-    #[arguments(limit: $limit, eventTypeSelectors: $event_type_selectors, partitions: $partitions)]
+    #[arguments(limit: $limit, eventTypeSelectors: $event_type_selectors, partitions: $partitions, afterTimestampMillis: $after_timestamp_millis, beforeTimestampMillis: $before_timestamp_millis)]
     #[cynic(rename = "assetEventHistory")]
     asset_event_history: AssetResultEventHistoryConnection,
 }
@@ -1304,6 +1329,8 @@ pub async fn get_asset_events(
     event_type: Vec<AssetEventTypeFilter>,
     status: Vec<AssetEventStatusFilter>,
     partition: Option<String>,
+    since: Option<String>,
+    until: Option<String>,
     fmt: &Option<OutputFormat>,
 ) -> Result<()> {
     use cynic::{QueryBuilder, http::ReqwestExt};
@@ -1321,6 +1348,9 @@ pub async fn get_asset_events(
         };
     }
 
+    let after_millis = since.map(|s| parse_date_to_millis(&s)).transpose()?;
+    let before_millis = until.map(|s| parse_date_to_millis(&s)).transpose()?;
+
     let operation = AssetEventsQuery::build(AssetEventsQueryVariables {
         asset_key: AssetKeyInput {
             path: parse_asset_key(&key),
@@ -1328,6 +1358,8 @@ pub async fn get_asset_events(
         limit: limit.unwrap_or(25),
         event_type_selectors: selectors,
         partitions: partition.map(|p| vec![p]),
+        after_timestamp_millis: after_millis,
+        before_timestamp_millis: before_millis,
     });
 
     let response = reqwest::Client::new()
@@ -2538,4 +2570,71 @@ async fn fetch_lineage_nodes(
         .data
         .ok_or_else(|| anyhow::anyhow!("No data in response"))?
         .asset_nodes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_date_to_millis_iso8601_utc() {
+        let result = parse_date_to_millis("2026-05-01T00:00:00Z").unwrap();
+        assert_eq!(result, "1777593600000");
+    }
+
+    #[test]
+    fn test_parse_date_to_millis_iso8601_with_offset() {
+        let result = parse_date_to_millis("2026-05-01T01:00:00+01:00").unwrap();
+        // +01:00 means this is the same instant as 2026-05-01T00:00:00Z
+        assert_eq!(result, "1777593600000");
+    }
+
+    #[test]
+    fn test_parse_date_to_millis_iso8601_with_fractional_seconds() {
+        let result = parse_date_to_millis("2026-05-01T12:30:45.123Z").unwrap();
+        // 1777593600000 + 12*3600*1000 + 30*60*1000 + 45*1000 + 123
+        assert_eq!(result, "1777638645123");
+    }
+
+    #[test]
+    fn test_parse_date_to_millis_date_only() {
+        let result = parse_date_to_millis("2026-05-01").unwrap();
+        // Should be midnight local time — just verify it parses to a valid number
+        let millis: i64 = result.parse().unwrap();
+        assert!(millis > 0);
+        // Should be within 24h of the UTC midnight value (timezone offset)
+        let utc_midnight = 1777593600000i64;
+        assert!((millis - utc_midnight).abs() < 86_400_000);
+    }
+
+    #[test]
+    fn test_parse_date_to_millis_invalid_format() {
+        let result = parse_date_to_millis("not-a-date");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid date format")
+        );
+    }
+
+    #[test]
+    fn test_parse_date_to_millis_partial_date() {
+        let result = parse_date_to_millis("2026-05");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_date_to_millis_empty_string() {
+        let result = parse_date_to_millis("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_date_to_millis_iso8601_negative_offset() {
+        let result = parse_date_to_millis("2026-05-01T00:00:00-05:00").unwrap();
+        // -05:00 means 5 hours after UTC midnight = 1777593600000 + 5*3600*1000
+        assert_eq!(result, "1777611600000");
+    }
 }
