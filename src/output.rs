@@ -666,7 +666,8 @@ pub fn format_insights_table(
         return;
     }
     let mut table = new_table();
-    let has_secondary = !secondary_header.is_empty() && rows.iter().any(|r| !r.secondary.is_empty());
+    let has_secondary =
+        !secondary_header.is_empty() && rows.iter().any(|r| !r.secondary.is_empty());
     if has_secondary {
         table.set_header(vec![entity_header, secondary_header, "TOTAL", "CHANGE"]);
     } else {
@@ -725,10 +726,7 @@ pub fn format_insights_info(
         Cell::new("Field").set_alignment(CellAlignment::Right),
         Cell::new("Value"),
     ]);
-    table.add_row(vec![
-        Cell::new("Latest Data"),
-        Cell::new(latest_data_time),
-    ]);
+    table.add_row(vec![Cell::new("Latest Data"), Cell::new(latest_data_time)]);
     table.add_row(vec![
         Cell::new("Downsampling Rate"),
         Cell::new(

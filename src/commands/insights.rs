@@ -29,10 +29,7 @@ const METRIC_ALIASES: &[(&str, &str)] = &[
     ("check-warnings", "__dagster_asset_check_warnings"),
     ("check-success-rate", "__dagster_asset_check_success_rate"),
     ("success-rate", "__dagster_asset_success_rate"),
-    (
-        "time-to-resolution",
-        "__dagster_asset_time_to_resolution",
-    ),
+    ("time-to-resolution", "__dagster_asset_time_to_resolution"),
     ("snowflake-credits", "__cost_snowflake_credits"),
 ];
 
@@ -273,11 +270,7 @@ fn build_metrics_selector(
     )
 }
 
-async fn execute_graphql(
-    token: &str,
-    api_url: &str,
-    query: &str,
-) -> Result<serde_json::Value> {
+async fn execute_graphql(token: &str, api_url: &str, query: &str) -> Result<serde_json::Value> {
     let client = reqwest::Client::new();
     let response = client
         .post(api_url)
@@ -297,7 +290,6 @@ async fn execute_graphql(
         .cloned()
         .ok_or_else(|| anyhow::anyhow!("No data in response"))
 }
-
 
 /// Fetch the current deployment ID from the API.
 async fn fetch_current_deployment_id(token: &str, api_url: &str) -> Result<i64> {
@@ -357,11 +349,7 @@ pub async fn list_metrics(
 }
 
 /// Show deployment insights metadata.
-pub async fn get_info(
-    token: &str,
-    api_url: &str,
-    fmt: &Option<OutputFormat>,
-) -> Result<()> {
+pub async fn get_info(token: &str, api_url: &str, fmt: &Option<OutputFormat>) -> Result<()> {
     let query = r#"{ reportingMetadata { downsamplingRate latestDataTimestamp availableMetadataKeys } metricsTimeRanges { timeRanges } }"#;
 
     let data = execute_graphql(token, api_url, query).await?;
@@ -401,13 +389,18 @@ pub async fn get_info(
     match fmt {
         Some(f) => output::render(&info, f),
         None => {
-            output::format_insights_info(&info.latest_data_time, info.downsampling_rate, &info.available_time_ranges);
+            output::format_insights_info(
+                &info.latest_data_time,
+                info.downsampling_rate,
+                &info.available_time_ranges,
+            );
             Ok(())
         }
     }
 }
 
 /// Query metrics by job.
+#[allow(clippy::too_many_arguments)]
 pub async fn metrics_by_job(
     token: &str,
     api_url: &str,
@@ -445,6 +438,7 @@ pub async fn metrics_by_job(
 }
 
 /// Query metrics by asset.
+#[allow(clippy::too_many_arguments)]
 pub async fn metrics_by_asset(
     token: &str,
     api_url: &str,
@@ -486,6 +480,7 @@ pub async fn metrics_by_asset(
 }
 
 /// Query metrics by asset group.
+#[allow(clippy::too_many_arguments)]
 pub async fn metrics_by_asset_group(
     token: &str,
     api_url: &str,
@@ -526,6 +521,7 @@ pub async fn metrics_by_asset_group(
 }
 
 /// Query metrics by deployment.
+#[allow(clippy::too_many_arguments)]
 pub async fn metrics_by_deployment(
     token: &str,
     api_url: &str,
@@ -688,7 +684,10 @@ fn build_asset_filter(limit: Option<i32>, asset_selection: &Option<String>) -> S
     match asset_selection {
         Some(sel) => {
             let escaped = sel.replace('\\', "\\\\").replace('"', "\\\"");
-            format!("{{ assetSelection: \"{}\", limit: {} }}", escaped, limit_val)
+            format!(
+                "{{ assetSelection: \"{}\", limit: {} }}",
+                escaped, limit_val
+            )
         }
         None => format!("{{ limit: {} }}", limit_val),
     }
@@ -841,14 +840,8 @@ mod tests {
 
     #[test]
     fn test_resolve_metric_name_passthrough() {
-        assert_eq!(
-            resolve_metric_name("__meta_num_rows"),
-            "__meta_num_rows"
-        );
-        assert_eq!(
-            resolve_metric_name("custom_metric"),
-            "custom_metric"
-        );
+        assert_eq!(resolve_metric_name("__meta_num_rows"), "__meta_num_rows");
+        assert_eq!(resolve_metric_name("custom_metric"), "custom_metric");
     }
 
     #[test]
@@ -917,12 +910,7 @@ mod tests {
 
     #[test]
     fn test_resolve_time_range_last() {
-        let (after, before) = resolve_time_range(
-            &Some("7d".to_string()),
-            &None,
-            &None,
-        )
-        .unwrap();
+        let (after, before) = resolve_time_range(&Some("7d".to_string()), &None, &None).unwrap();
         let diff = before - after;
         assert!((diff - 604800.0).abs() < 1.0);
     }
@@ -1016,23 +1004,13 @@ mod tests {
 
     #[test]
     fn test_build_asset_selection_from_code_location() {
-        let sel = build_asset_selection(
-            &Some("dp-dagster".to_string()),
-            &None,
-            &None,
-        )
-        .unwrap();
+        let sel = build_asset_selection(&Some("dp-dagster".to_string()), &None, &None).unwrap();
         assert_eq!(sel, Some("code_location:\"dp-dagster\"".to_string()));
     }
 
     #[test]
     fn test_build_asset_selection_from_group() {
-        let sel = build_asset_selection(
-            &None,
-            &Some("ism".to_string()),
-            &None,
-        )
-        .unwrap();
+        let sel = build_asset_selection(&None, &Some("ism".to_string()), &None).unwrap();
         assert_eq!(sel, Some("group:\"ism\"".to_string()));
     }
 
@@ -1058,10 +1036,7 @@ mod tests {
             &Some("key:\"dp_model_db/release/fdp_*\"".to_string()),
         )
         .unwrap();
-        assert_eq!(
-            sel,
-            Some("key:\"dp_model_db/release/fdp_*\"".to_string())
-        );
+        assert_eq!(sel, Some("key:\"dp_model_db/release/fdp_*\"".to_string()));
     }
 
     #[test]
@@ -1078,10 +1053,12 @@ mod tests {
             &Some("key:\"x\"".to_string()),
         );
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot combine --selection"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot combine --selection")
+        );
     }
 
     #[test]

@@ -482,14 +482,12 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                 )
                 .await
             }),
-            GetResource::InsightsMetrics { entity_type } => {
-                tokio::runtime::Runtime::new()?.block_on(async {
+            GetResource::InsightsMetrics { entity_type } => tokio::runtime::Runtime::new()?
+                .block_on(async {
                     commands::insights::list_metrics(&token, &api_url, &entity_type, &fmt).await
-                })
-            }
-            GetResource::InsightsInfo => tokio::runtime::Runtime::new()?.block_on(async {
-                commands::insights::get_info(&token, &api_url, &fmt).await
-            }),
+                }),
+            GetResource::InsightsInfo => tokio::runtime::Runtime::new()?
+                .block_on(async { commands::insights::get_info(&token, &api_url, &fmt).await }),
             GetResource::InsightsByJob {
                 metric,
                 last,

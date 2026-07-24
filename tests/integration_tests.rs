@@ -1875,7 +1875,6 @@ async fn test_insights_info_success() {
 async fn test_insights_by_job_success() {
     let mut server = Server::new_async().await;
 
-
     let mock = server
         .mock("POST", "/graphql")
         .with_status(200)
@@ -1944,7 +1943,6 @@ async fn test_insights_by_job_success() {
 async fn test_insights_by_job_with_options() {
     let mut server = Server::new_async().await;
 
-
     let mock = server
         .mock("POST", "/graphql")
         .with_status(200)
@@ -1985,7 +1983,6 @@ async fn test_insights_by_job_with_options() {
 #[tokio::test]
 async fn test_insights_by_asset_success() {
     let mut server = Server::new_async().await;
-
 
     let mock = server
         .mock("POST", "/graphql")
@@ -2044,7 +2041,6 @@ async fn test_insights_by_asset_success() {
 #[tokio::test]
 async fn test_insights_by_asset_group_success() {
     let mut server = Server::new_async().await;
-
 
     let mock = server
         .mock("POST", "/graphql")
@@ -2260,7 +2256,6 @@ async fn test_insights_asset_materializations_success() {
 async fn test_insights_api_error_response() {
     let mut server = Server::new_async().await;
 
-
     let mock = server
         .mock("POST", "/graphql")
         .with_status(200)
@@ -2302,7 +2297,6 @@ async fn test_insights_api_error_response() {
 async fn test_insights_graphql_error() {
     let mut server = Server::new_async().await;
 
-
     let mock = server
         .mock("POST", "/graphql")
         .with_status(200)
@@ -2339,7 +2333,6 @@ async fn test_insights_graphql_error() {
 #[tokio::test]
 async fn test_insights_empty_metrics() {
     let mut server = Server::new_async().await;
-
 
     let mock = server
         .mock("POST", "/graphql")
@@ -2383,7 +2376,6 @@ async fn test_insights_empty_metrics() {
 #[tokio::test]
 async fn test_insights_json_output() {
     let mut server = Server::new_async().await;
-
 
     let mock = server
         .mock("POST", "/graphql")
