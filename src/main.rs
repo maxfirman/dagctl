@@ -170,6 +170,151 @@ enum GetResource {
         #[arg(long, value_delimiter = ',')]
         status: Vec<commands::assets::CheckExecutionStatusFilter>,
     },
+    /// List available insight metrics
+    #[command(name = "insights-metrics")]
+    InsightsMetrics {
+        /// Entity type to list metrics for (jobs, assets, asset-groups, deployments)
+        #[arg(long, name = "for")]
+        entity_type: Option<commands::insights::MetricsEntityType>,
+    },
+    /// Show deployment insights metadata (latest data timestamp, available ranges)
+    #[command(name = "insights-info")]
+    InsightsInfo,
+    /// Query metrics by job
+    #[command(name = "insights-by-job")]
+    InsightsByJob {
+        /// Metric to query (e.g. dagster-credits, compute-duration, snowflake-credits)
+        #[arg(long)]
+        metric: String,
+        /// Time range duration (e.g. 24h, 7d, 30d, 120d)
+        #[arg(long)]
+        last: Option<String>,
+        /// Start date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        since: Option<String>,
+        /// End date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        until: Option<String>,
+        /// Time granularity (hourly, daily, weekly, monthly)
+        #[arg(long, default_value = "daily")]
+        granularity: commands::insights::Granularity,
+        /// Aggregation function (sum, average, p75, p90, p95, p99, max, min)
+        #[arg(long)]
+        aggregation: Option<commands::insights::AggregationFunction>,
+        /// Max entities to return
+        #[arg(long)]
+        limit: Option<i32>,
+    },
+    /// Query metrics by asset
+    #[command(name = "insights-by-asset")]
+    InsightsByAsset {
+        /// Metric to query (e.g. dagster-credits, compute-duration, snowflake-credits)
+        #[arg(long)]
+        metric: String,
+        /// Time range duration (e.g. 24h, 7d, 30d, 120d)
+        #[arg(long)]
+        last: Option<String>,
+        /// Start date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        since: Option<String>,
+        /// End date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        until: Option<String>,
+        /// Time granularity (hourly, daily, weekly, monthly)
+        #[arg(long, default_value = "daily")]
+        granularity: commands::insights::Granularity,
+        /// Aggregation function (sum, average, p75, p90, p95, p99, max, min)
+        #[arg(long)]
+        aggregation: Option<commands::insights::AggregationFunction>,
+        /// Max entities to return
+        #[arg(long)]
+        limit: Option<i32>,
+        /// Filter to a specific code location
+        #[arg(long)]
+        code_location: Option<String>,
+        /// Filter to a specific asset group
+        #[arg(long)]
+        group: Option<String>,
+        /// Raw asset selection query (Dagster selection DSL). Conflicts with --code-location/--group.
+        #[arg(long)]
+        selection: Option<String>,
+    },
+    /// Query metrics by asset group
+    #[command(name = "insights-by-asset-group")]
+    InsightsByAssetGroup {
+        /// Metric to query (e.g. dagster-credits, compute-duration, snowflake-credits)
+        #[arg(long)]
+        metric: String,
+        /// Time range duration (e.g. 24h, 7d, 30d, 120d)
+        #[arg(long)]
+        last: Option<String>,
+        /// Start date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        since: Option<String>,
+        /// End date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        until: Option<String>,
+        /// Time granularity (hourly, daily, weekly, monthly)
+        #[arg(long, default_value = "daily")]
+        granularity: commands::insights::Granularity,
+        /// Aggregation function (sum, average, p75, p90, p95, p99, max, min)
+        #[arg(long)]
+        aggregation: Option<commands::insights::AggregationFunction>,
+        /// Max entities to return
+        #[arg(long)]
+        limit: Option<i32>,
+        /// Filter to a specific code location
+        #[arg(long)]
+        code_location: Option<String>,
+        /// Raw asset selection query (Dagster selection DSL). Conflicts with --code-location.
+        #[arg(long)]
+        selection: Option<String>,
+    },
+    /// Query metrics by deployment
+    #[command(name = "insights-by-deployment")]
+    InsightsByDeployment {
+        /// Metric to query (e.g. dagster-credits, compute-duration, snowflake-credits)
+        #[arg(long)]
+        metric: String,
+        /// Time range duration (e.g. 24h, 7d, 30d, 120d)
+        #[arg(long)]
+        last: Option<String>,
+        /// Start date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        since: Option<String>,
+        /// End date (ISO 8601 or YYYY-MM-DD)
+        #[arg(long)]
+        until: Option<String>,
+        /// Time granularity (hourly, daily, weekly, monthly)
+        #[arg(long, default_value = "daily")]
+        granularity: commands::insights::Granularity,
+        /// Aggregation function (sum, average, p75, p90, p95, p99, max, min)
+        #[arg(long)]
+        aggregation: Option<commands::insights::AggregationFunction>,
+    },
+    /// Query per-run metrics for a specific job
+    #[command(name = "insights-job-runs")]
+    InsightsJobRuns {
+        /// Metric to query
+        #[arg(long)]
+        metric: String,
+        /// Job name
+        #[arg(long)]
+        job: String,
+        /// Code location name
+        #[arg(long)]
+        code_location: String,
+    },
+    /// Query per-materialization metrics for a specific asset
+    #[command(name = "insights-asset-materializations")]
+    InsightsAssetMaterializations {
+        /// Metric to query
+        #[arg(long)]
+        metric: String,
+        /// Asset key (slash-separated, e.g. prefix/my_asset)
+        #[arg(long)]
+        asset: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -337,6 +482,137 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                 )
                 .await
             }),
+            GetResource::InsightsMetrics { entity_type } => {
+                tokio::runtime::Runtime::new()?.block_on(async {
+                    commands::insights::list_metrics(&token, &api_url, &entity_type, &fmt).await
+                })
+            }
+            GetResource::InsightsInfo => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::insights::get_info(&token, &api_url, &fmt).await
+            }),
+            GetResource::InsightsByJob {
+                metric,
+                last,
+                since,
+                until,
+                granularity,
+                aggregation,
+                limit,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::insights::metrics_by_job(
+                    &token,
+                    &api_url,
+                    &metric,
+                    &last,
+                    &since,
+                    &until,
+                    &granularity,
+                    &aggregation,
+                    limit,
+                    &fmt,
+                )
+                .await
+            }),
+            GetResource::InsightsByAsset {
+                metric,
+                last,
+                since,
+                until,
+                granularity,
+                aggregation,
+                limit,
+                code_location,
+                group,
+                selection,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::insights::metrics_by_asset(
+                    &token,
+                    &api_url,
+                    &metric,
+                    &last,
+                    &since,
+                    &until,
+                    &granularity,
+                    &aggregation,
+                    limit,
+                    &code_location,
+                    &group,
+                    &selection,
+                    &fmt,
+                )
+                .await
+            }),
+            GetResource::InsightsByAssetGroup {
+                metric,
+                last,
+                since,
+                until,
+                granularity,
+                aggregation,
+                limit,
+                code_location,
+                selection,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::insights::metrics_by_asset_group(
+                    &token,
+                    &api_url,
+                    &metric,
+                    &last,
+                    &since,
+                    &until,
+                    &granularity,
+                    &aggregation,
+                    limit,
+                    &code_location,
+                    &selection,
+                    &fmt,
+                )
+                .await
+            }),
+            GetResource::InsightsByDeployment {
+                metric,
+                last,
+                since,
+                until,
+                granularity,
+                aggregation,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::insights::metrics_by_deployment(
+                    &token,
+                    &api_url,
+                    &metric,
+                    &last,
+                    &since,
+                    &until,
+                    &granularity,
+                    &aggregation,
+                    &fmt,
+                )
+                .await
+            }),
+            GetResource::InsightsJobRuns {
+                metric,
+                job,
+                code_location,
+            } => tokio::runtime::Runtime::new()?.block_on(async {
+                commands::insights::job_run_metrics(
+                    &token,
+                    &api_url,
+                    &metric,
+                    &job,
+                    &code_location,
+                    &fmt,
+                )
+                .await
+            }),
+            GetResource::InsightsAssetMaterializations { metric, asset } => {
+                tokio::runtime::Runtime::new()?.block_on(async {
+                    commands::insights::asset_materialization_metrics(
+                        &token, &api_url, &metric, &asset, &fmt,
+                    )
+                    .await
+                })
+            }
         },
         Commands::Debug => tokio::runtime::Runtime::new()?.block_on(async {
             commands::debug::run_debug(&token, &organization, deployment.as_deref(), &api_url).await

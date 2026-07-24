@@ -256,6 +256,73 @@ dagctl get asset-check-executions <KEY> <CHECK_NAME> --status failed
 dagctl get asset-check-executions <KEY> <CHECK_NAME> --status failed,execution-failed
 ```
 
+### Insights
+
+Query Dagster Cloud Insights metrics — compute duration, credit usage, materializations, and custom metrics over time.
+
+```bash
+# List available metrics
+dagctl get insights-metrics
+dagctl get insights-metrics --for assets
+dagctl get insights-metrics --for deployments
+
+# Show deployment insights metadata (latest data timestamp, available time ranges)
+dagctl get insights-info
+
+# Metrics by job (default: last 7 days, daily granularity)
+dagctl get insights-by-job --metric dagster-credits
+dagctl get insights-by-job --metric compute-duration --last 30d --granularity weekly
+dagctl get insights-by-job --metric dagster-credits --last 7d --limit 20
+
+# Metrics by asset
+dagctl get insights-by-asset --metric dagster-credits --last 7d
+dagctl get insights-by-asset --metric snowflake-credits --last 30d --limit 5
+
+# Filter assets by code location or group
+dagctl get insights-by-asset --metric dagster-credits --code-location dp-dagster
+dagctl get insights-by-asset --metric dagster-credits --group ism
+dagctl get insights-by-asset --metric dagster-credits --code-location dp-model --group ism
+
+# Raw asset selection query (Dagster selection DSL)
+dagctl get insights-by-asset --metric dagster-credits --selection 'key:"dp_model_db/release/fdp_*"'
+dagctl get insights-by-asset --metric dagster-credits --selection 'code_location:"dp-dagster" and group:"ism"'
+
+# Metrics by asset group
+dagctl get insights-by-asset-group --metric dagster-credits --last 7d
+
+# Metrics by deployment (aggregate for the current deployment)
+dagctl get insights-by-deployment --metric dagster-credits --last 30d
+
+# Per-run drill-down for a specific job
+dagctl get insights-job-runs --metric dagster-credits --job my_job --code-location my-location
+
+# Per-materialization drill-down for a specific asset
+dagctl get insights-asset-materializations --metric compute-duration --asset prefix/my_asset
+
+# Custom time ranges (ISO 8601 or YYYY-MM-DD)
+dagctl get insights-by-job --metric dagster-credits --since 2026-07-01 --until 2026-07-08
+
+# Aggregation functions
+dagctl get insights-by-job --metric compute-duration --aggregation average
+dagctl get insights-by-job --metric compute-duration --aggregation p95
+```
+
+**Metric short names:**
+
+| Short name | Description |
+|---|---|
+| `dagster-credits` | Dagster credit cost |
+| `compute-duration` | Step compute time (ms) |
+| `run-duration` | Wall clock run time (ms) |
+| `materializations` | Number of materializations |
+| `observations` | Number of observations |
+| `step-failures` | Number of step failures |
+| `step-retries` | Number of step retries |
+| `failures` | Failed materialization attempts |
+| `snowflake-credits` | Snowflake credit cost |
+
+You can also pass raw internal metric names (e.g. `--metric __meta_num_rows`). Use `dagctl get insights-metrics` to discover all available metrics.
+
 ### Schema Management
 
 Download or update the GraphQL schema (needed when building from source):

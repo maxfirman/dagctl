@@ -1740,3 +1740,698 @@ async fn test_get_asset_events_invalid_until_date() {
             .contains("Invalid date format")
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Insights integration tests
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn test_insights_list_metrics_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "metricTypesForJob": {
+                        "metricTypes": [
+                            {
+                                "metricName": "__dagster_dagster_credits",
+                                "displayName": "Dagster credits",
+                                "category": "Dagster metrics",
+                                "unitType": "INTEGER",
+                                "description": "Credit cost",
+                                "visible": true
+                            },
+                            {
+                                "metricName": "__dagster_execution_time_ms",
+                                "displayName": "Compute duration",
+                                "category": "Dagster metrics",
+                                "unitType": "TIME_MS",
+                                "description": "Time computing",
+                                "visible": true
+                            },
+                            {
+                                "metricName": "__meta_hidden",
+                                "displayName": "hidden",
+                                "category": "User provided metrics",
+                                "unitType": "FLOAT",
+                                "description": null,
+                                "visible": false
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result =
+        dagctl::commands::insights::list_metrics("test-token", &api_url, &None, &None).await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_list_metrics_for_assets() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "metricTypesForAsset": {
+                        "metricTypes": [
+                            {
+                                "metricName": "__dagster_materializations",
+                                "displayName": "Materializations",
+                                "category": "Dagster metrics",
+                                "unitType": "INTEGER",
+                                "description": "Number of materializations",
+                                "visible": true
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let entity_type = Some(dagctl::commands::insights::MetricsEntityType::Assets);
+    let result =
+        dagctl::commands::insights::list_metrics("test-token", &api_url, &entity_type, &None).await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_info_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "reportingMetadata": {
+                        "downsamplingRate": 1.0,
+                        "latestDataTimestamp": 1779147979.841,
+                        "availableMetadataKeys": ["row_count", "duration"]
+                    },
+                    "metricsTimeRanges": {
+                        "timeRanges": ["Last7Days", "Last30Days", "Last120Days"]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::get_info("test-token", &api_url, &None).await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_by_job_success() {
+    let mut server = Server::new_async().await;
+
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "reportingMetricsByJob": {
+                        "timestamps": [1778457600.0, 1778544000.0, 1778630400.0],
+                        "metrics": [
+                            {
+                                "entity": {
+                                    "jobName": "__ASSET_JOB",
+                                    "codeLocationName": "my-location",
+                                    "repositoryName": "__repository__"
+                                },
+                                "aggregateValue": 251928.0,
+                                "aggregateValueChange": {
+                                    "change": 0.15,
+                                    "isNewlyAvailable": false
+                                },
+                                "values": [29365.0, 29738.0, 37164.0]
+                            },
+                            {
+                                "entity": {
+                                    "jobName": "my_job",
+                                    "codeLocationName": "other-location",
+                                    "repositoryName": "__repository__"
+                                },
+                                "aggregateValue": 44163.0,
+                                "aggregateValueChange": {
+                                    "change": -0.05,
+                                    "isNewlyAvailable": false
+                                },
+                                "values": [3995.0, 3322.0, 6654.0]
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::metrics_by_job(
+        "test-token",
+        &api_url,
+        "dagster-credits",
+        &Some("7d".to_string()),
+        &None,
+        &None,
+        &dagctl::commands::insights::Granularity::Daily,
+        &None,
+        Some(10),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_by_job_with_options() {
+    let mut server = Server::new_async().await;
+
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "reportingMetricsByJob": {
+                        "timestamps": [1778457600.0],
+                        "metrics": []
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::metrics_by_job(
+        "test-token",
+        &api_url,
+        "compute-duration",
+        &Some("30d".to_string()),
+        &None,
+        &None,
+        &dagctl::commands::insights::Granularity::Weekly,
+        &Some(dagctl::commands::insights::AggregationFunction::Average),
+        Some(5),
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_by_asset_success() {
+    let mut server = Server::new_async().await;
+
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "reportingMetricsByAsset": {
+                        "timestamps": [1778457600.0, 1778544000.0],
+                        "metrics": [
+                            {
+                                "entity": {
+                                    "assetKey": {"path": ["prefix", "my_asset"]},
+                                    "assetGroup": "my_group",
+                                    "codeLocationName": "my-location"
+                                },
+                                "aggregateValue": 5106.0,
+                                "aggregateValueChange": {
+                                    "change": 0.0,
+                                    "isNewlyAvailable": false
+                                },
+                                "values": [396.0, 268.0]
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::metrics_by_asset(
+        "test-token",
+        &api_url,
+        "dagster-credits",
+        &Some("7d".to_string()),
+        &None,
+        &None,
+        &dagctl::commands::insights::Granularity::Daily,
+        &None,
+        Some(10),
+        &None,
+        &None,
+        &None,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_by_asset_group_success() {
+    let mut server = Server::new_async().await;
+
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "reportingMetricsByAssetGroup": {
+                        "timestamps": [1778457600.0, 1778544000.0],
+                        "metrics": [
+                            {
+                                "entity": {
+                                    "groupName": "ism",
+                                    "codeLocationName": "dp-model",
+                                    "repositoryName": "__repository__"
+                                },
+                                "aggregateValue": 245111.0,
+                                "aggregateValueChange": {
+                                    "change": 0.1,
+                                    "isNewlyAvailable": false
+                                },
+                                "values": [26113.0, 26692.0]
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::metrics_by_asset_group(
+        "test-token",
+        &api_url,
+        "dagster-credits",
+        &Some("7d".to_string()),
+        &None,
+        &None,
+        &dagctl::commands::insights::Granularity::Daily,
+        &None,
+        Some(10),
+        &None,
+        &None,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_by_deployment_success() {
+    let mut server = Server::new_async().await;
+
+    let _deployment_mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "currentDeployment": {
+                        "deploymentId": 65063
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "reportingMetricsByDeployment": {
+                        "timestamps": [1778457600.0, 1778544000.0, 1778630400.0],
+                        "metrics": [
+                            {
+                                "entity": {
+                                    "deploymentName": "prod"
+                                },
+                                "aggregateValue": 500000.0,
+                                "aggregateValueChange": {
+                                    "change": 0.05,
+                                    "isNewlyAvailable": false
+                                },
+                                "values": [160000.0, 170000.0, 170000.0]
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::metrics_by_deployment(
+        "test-token",
+        &api_url,
+        "dagster-credits",
+        &Some("30d".to_string()),
+        &None,
+        &None,
+        &dagctl::commands::insights::Granularity::Daily,
+        &None,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_job_runs_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "runLevelMetricsForJob": {
+                        "runsWithData": [
+                            {
+                                "value": 84.0,
+                                "runId": "ef2a8b63-4c10-4364-a202-a01bd2b24a95",
+                                "timestamp": 1779146714.359
+                            },
+                            {
+                                "value": 84.0,
+                                "runId": "8f4c9a2c-ef41-450e-b432-c515528e317a",
+                                "timestamp": 1779146108.634
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::job_run_metrics(
+        "test-token",
+        &api_url,
+        "dagster-credits",
+        "instrument_graph_job",
+        "lens-platform-dagster",
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_asset_materializations_success() {
+    let mut server = Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "materializationLevelMetricsForAsset": {
+                        "runsWithData": [
+                            {
+                                "value": 1500.0,
+                                "runId": "abc-123",
+                                "timestamp": 1779000000.0
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::asset_materialization_metrics(
+        "test-token",
+        &api_url,
+        "compute-duration",
+        "prefix/my_asset",
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_api_error_response() {
+    let mut server = Server::new_async().await;
+
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "reportingMetricsByJob": {
+                        "message": "Invalid timestamp: year is out of range"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::metrics_by_job(
+        "test-token",
+        &api_url,
+        "dagster-credits",
+        &Some("7d".to_string()),
+        &None,
+        &None,
+        &dagctl::commands::insights::Granularity::Daily,
+        &None,
+        None,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("API error"));
+}
+
+#[tokio::test]
+async fn test_insights_graphql_error() {
+    let mut server = Server::new_async().await;
+
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "errors": [{"message": "Unauthorized"}]
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::metrics_by_job(
+        "test-token",
+        &api_url,
+        "dagster-credits",
+        &Some("7d".to_string()),
+        &None,
+        &None,
+        &dagctl::commands::insights::Granularity::Daily,
+        &None,
+        None,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("GraphQL errors"));
+}
+
+#[tokio::test]
+async fn test_insights_empty_metrics() {
+    let mut server = Server::new_async().await;
+
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "reportingMetricsByAssetGroup": {
+                        "timestamps": [1778457600.0, 1778544000.0],
+                        "metrics": []
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::metrics_by_asset_group(
+        "test-token",
+        &api_url,
+        "snowflake-credits",
+        &Some("7d".to_string()),
+        &None,
+        &None,
+        &dagctl::commands::insights::Granularity::Daily,
+        &None,
+        None,
+        &None,
+        &None,
+        &None,
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_insights_json_output() {
+    let mut server = Server::new_async().await;
+
+
+    let mock = server
+        .mock("POST", "/graphql")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "data": {
+                    "reportingMetricsByJob": {
+                        "timestamps": [1778457600.0],
+                        "metrics": [
+                            {
+                                "entity": {
+                                    "jobName": "test_job",
+                                    "codeLocationName": "loc",
+                                    "repositoryName": "__repository__"
+                                },
+                                "aggregateValue": 100.0,
+                                "aggregateValueChange": {
+                                    "change": 0.0,
+                                    "isNewlyAvailable": true
+                                },
+                                "values": [100.0]
+                            }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let api_url = format!("{}/graphql", server.url());
+    let result = dagctl::commands::insights::metrics_by_job(
+        "test-token",
+        &api_url,
+        "dagster-credits",
+        &Some("7d".to_string()),
+        &None,
+        &None,
+        &dagctl::commands::insights::Granularity::Daily,
+        &None,
+        None,
+        &Some(dagctl::output::OutputFormat::Json),
+    )
+    .await;
+
+    mock.assert_async().await;
+    assert!(result.is_ok());
+}

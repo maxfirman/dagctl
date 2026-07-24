@@ -643,3 +643,157 @@ pub fn format_asset_check_executions_table(
     }
     println!("{table}");
 }
+
+// --- insights ---
+
+use crate::commands::insights::{InsightsRunEntryResponse, MetricTypeResponse};
+
+pub struct InsightsMetricRow {
+    pub name: String,
+    pub secondary: String,
+    pub aggregate_value: f64,
+    pub change_pct: f64,
+}
+
+pub fn format_insights_table(
+    rows: &[InsightsMetricRow],
+    entity_header: &str,
+    secondary_header: &str,
+    metric: &str,
+) {
+    if rows.is_empty() {
+        println!("No metrics data found for '{}'.", metric);
+        return;
+    }
+    let mut table = new_table();
+    let has_secondary = !secondary_header.is_empty() && rows.iter().any(|r| !r.secondary.is_empty());
+    if has_secondary {
+        table.set_header(vec![entity_header, secondary_header, "TOTAL", "CHANGE"]);
+    } else {
+        table.set_header(vec![entity_header, "TOTAL", "CHANGE"]);
+    }
+    for row in rows {
+        let total_str = format_metric_value(row.aggregate_value);
+        let change_str = if row.change_pct == 0.0 {
+            "-".to_string()
+        } else {
+            format!("{:+.1}%", row.change_pct * 100.0)
+        };
+        if has_secondary {
+            table.add_row(vec![
+                Cell::new(&row.name),
+                Cell::new(&row.secondary),
+                Cell::new(&total_str).set_alignment(CellAlignment::Right),
+                Cell::new(&change_str).set_alignment(CellAlignment::Right),
+            ]);
+        } else {
+            table.add_row(vec![
+                Cell::new(&row.name),
+                Cell::new(&total_str).set_alignment(CellAlignment::Right),
+                Cell::new(&change_str).set_alignment(CellAlignment::Right),
+            ]);
+        }
+    }
+    println!("{table}");
+}
+
+pub fn format_insights_metrics_table(metrics: &[&MetricTypeResponse]) {
+    if metrics.is_empty() {
+        println!("No metrics available.");
+        return;
+    }
+    let mut table = new_table();
+    table.set_header(vec!["METRIC NAME", "DISPLAY NAME", "CATEGORY", "UNIT"]);
+    for m in metrics {
+        table.add_row(vec![
+            Cell::new(&m.metric_name),
+            Cell::new(&m.display_name),
+            Cell::new(m.category.as_deref().unwrap_or("-")),
+            Cell::new(m.unit_type.as_deref().unwrap_or("-")),
+        ]);
+    }
+    println!("{table}");
+}
+
+pub fn format_insights_info(
+    latest_data_time: &str,
+    downsampling_rate: Option<f64>,
+    time_ranges: &[String],
+) {
+    let mut table = new_table();
+    table.set_header(vec![
+        Cell::new("Field").set_alignment(CellAlignment::Right),
+        Cell::new("Value"),
+    ]);
+    table.add_row(vec![
+        Cell::new("Latest Data"),
+        Cell::new(latest_data_time),
+    ]);
+    table.add_row(vec![
+        Cell::new("Downsampling Rate"),
+        Cell::new(
+            downsampling_rate
+                .map(|r| format!("{}", r))
+                .unwrap_or_else(|| "-".into()),
+        ),
+    ]);
+    table.add_row(vec![
+        Cell::new("Time Ranges"),
+        Cell::new(time_ranges.join(", ")),
+    ]);
+    println!("{table}");
+}
+
+pub fn format_insights_run_metrics_table(runs: &[InsightsRunEntryResponse], metric: &str) {
+    if runs.is_empty() {
+        println!("No run-level metrics data found for '{}'.", metric);
+        return;
+    }
+    let mut table = new_table();
+    table.set_header(vec!["RUN ID", "TIMESTAMP", "VALUE"]);
+    for run in runs {
+        table.add_row(vec![
+            Cell::new(&run.run_id),
+            Cell::new(format_timestamp(Some(run.timestamp))),
+            Cell::new(format_metric_value(run.value)).set_alignment(CellAlignment::Right),
+        ]);
+    }
+    println!("{table}");
+}
+
+fn format_metric_value(value: f64) -> String {
+    if value == 0.0 {
+        return "0".to_string();
+    }
+    if value.abs() >= 1_000_000.0 {
+        format!("{:.1}M", value / 1_000_000.0)
+    } else if value.abs() >= 1_000.0 {
+        // Format with thousands separators
+        let int_part = value as i64;
+        let formatted = format_with_commas(int_part);
+        if (value - int_part as f64).abs() < 0.01 {
+            formatted
+        } else {
+            format!("{:.1}", value)
+        }
+    } else if value.fract().abs() < 0.001 {
+        format!("{}", value as i64)
+    } else {
+        format!("{:.2}", value)
+    }
+}
+
+fn format_with_commas(n: i64) -> String {
+    let s = n.abs().to_string();
+    let mut result = String::new();
+    for (i, c) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    if n < 0 {
+        result.push('-');
+    }
+    result.chars().rev().collect()
+}

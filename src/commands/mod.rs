@@ -1,6 +1,7 @@
 pub mod assets;
 pub mod code_locations;
 pub mod debug;
+pub mod insights;
 pub mod jobs;
 pub mod runs;
 pub mod schema;
